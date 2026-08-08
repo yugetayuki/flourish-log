@@ -611,6 +611,52 @@ describe("PWA v2.4: 起床時刻(計測のみ)", () => {
   });
 });
 
+describe("PWA v2.4: 体重の自由入力", () => {
+  const enterWeight = (dom, text) => {
+    q(dom, '[data-f="weight"][data-v="t"]').click();
+    const wv = q(dom, "#wv");
+    wv.value = text;
+    wv.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
+  };
+  const weightSvgText = (dom) => {
+    byText(dom, "button.tb", "推移").click();
+    const svgs = qa(dom, "svg");
+    return [...svgs[svgs.length - 1].querySelectorAll("text")].map((t) => t.textContent).join(" ");
+  };
+
+  it("ドットが2つある入力は数値として読める先頭までに切り詰める", () => {
+    const dom = boot();
+    const f = dom.window.__flourish;
+    enterWeight(dom, "68.5.2");
+    expect(f.getS().entries[f.fmt(new Date())].weightVal).toBe("68.5");
+    expect(q(dom, "#wv").value).toBe("68.5"); // 再描画後の欄にも反映される
+  });
+
+  it("数字を含まない入力は未入力として捨てる", () => {
+    const dom = boot();
+    const f = dom.window.__flourish;
+    enterWeight(dom, ".");
+    expect(f.getS().entries[f.fmt(new Date())].weightVal).toBe(undefined);
+  });
+
+  it("推移タブの体重チャートにNaNが出ない", () => {
+    const dom = boot();
+    enterWeight(dom, "68.5.2");
+    expect(weightSvgText(dom)).not.toContain("NaN");
+  });
+
+  // entries は migrate() の正規化対象外なので、取り込みJSONからも壊れた値が入りうる
+  it("取り込みJSONに数値でないweightValがあってもチャートが壊れない", () => {
+    const f0 = boot().window.__flourish;
+    const d = f0.defaultData();
+    d.entries[f0.fmt(new Date())] = { weight: true, weightVal: "6.8.5" };
+    const dom = boot(JSON.stringify(d));
+    const text = weightSvgText(dom);
+    expect(text).not.toContain("NaN");
+    expect(qa(dom, "svg").pop().querySelectorAll("circle").length).toBe(0);
+  });
+});
+
 describe("PWA v2.4: 朝コーヒー", () => {
   // カスタム項目は「昨日」カードに入る仕様なので、当朝の行動である朝コーヒーは CORE 側に置く
   it("記録タブの「今朝」カードにあり、✓ したで保存される", () => {

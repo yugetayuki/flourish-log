@@ -579,11 +579,14 @@ function viewTrend(today){
   for (var i=27;i>=0;i--){
     var dt = fmt(addDays(parseD(today), -i));
     var e = S.entries[dt] || {};
+    // weightVal は自由入力かつ migrate() の正規化対象外(entries は素通し)なので、
+    // NaN が軸の目盛りと折れ線の座標に伝播しないよう読み出し側で数値か確かめる
+    var wn = Number(e.weightVal);
     rows.push({d: md(dt),
       bed: e.bedtime!=null ? BEDTIME_VAL[e.bedtime] : null,
       wake: e.wake!=null ? WAKE_VAL[e.wake] : null,
       yt: e.youtube!=null ? e.youtube : null,
-      w: (e.weightVal!=null && e.weightVal!=="") ? Number(e.weightVal) : null});
+      w: (e.weightVal!=null && e.weightVal!=="" && isFinite(wn)) ? wn : null});
   }
   var bedT=[{v:23,l:"23:00"},{v:23.5,l:"23:30"},{v:24,l:"24:00"},{v:24.5,l:"24:30"},{v:25.2,l:"以降"}];
   var ytT=YT_OPTS.map(function(o,i){return {v:i,l:o};});
@@ -893,7 +896,11 @@ document.addEventListener("change", function(ev){
   var t = ev.target;
   if (t.id === "wv") {
     var e = Object.assign({}, S.entries[sel] || {});
-    var val = (t.value || "").replace(/[^0-9.]/g, "");
+    // 数字とドットだけ残しても "68.5.2" のような打ち間違いは通る。ドットが2つ残ると
+    // Number() が NaN になるので、「数字.数字」として読める先頭部分だけを採る
+    var digits = (t.value || "").replace(/[^0-9.]/g, "");
+    var val = (digits.match(/^\d*\.?\d*/) || [""])[0];
+    if (!/\d/.test(val)) val = "";
     if (val === "") delete e.weightVal; else e.weightVal = val;
     S.entries[sel] = e; save(); render(); return;
   }

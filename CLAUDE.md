@@ -4,7 +4,7 @@
 Claude.ai チャット上で要件定義〜v2.0まで開発された。本書は Claude Code への引き継ぎ資料。
 
 - 最終更新: 2026-08-08 / 現行バージョン: **v2.4**(`index.html` 内 eyebrow 表記と一致させること)
-- テスト: `npm install && npm test`(vitest 63本 + 実ブラウザ smoke 16項目、全パス)
+- テスト: `npm install && npm test`(vitest 67本 + 実ブラウザ smoke 16項目、全パス)
 
 ### 名前について(v2.3で改称)
 
@@ -107,6 +107,10 @@ Claude.ai チャット上で要件定義〜v2.0まで開発された。本書は
   `dataset` 経由で読むと元の文字列に戻るため、エスケープしても機能は変わらない。
 - **`migrate()` が型の境界(v2.2)。** JSON取り込みが唯一の外部入力経路なので、ここで
   `isPlainObject()` / `normCustom()` により型を揃える。これを通った後のコードは型を再検査しない。
+  **ただし `entries` の中身は素通し**(日付キーごとに舐めると取り込みが重くなるため)。
+  自由入力の `weightVal` だけは例外で、`change` ハンドラで「数字.数字」に整形し、
+  さらに `viewTrend()` の読み出し側で `isFinite()` を確認する。NaN を SVG の座標や目盛りに
+  渡すと軸ラベルごとチャートが壊れるため、入口と出口の両方で止める。
 - **`lastBackup` は「実際に持ち出せた」ときだけ更新する(v2.4)。** JSONのクリップボードコピーが
   成功したとき、またはファイル書き出し(`navigator.share`)が完了したときのみ。
   CSVは復元できないので数えず、共有シートを閉じた(AbortError)場合も数えない。
@@ -151,7 +155,7 @@ Claude.ai チャット上で要件定義〜v2.0まで開発された。本書は
 
 ```bash
 npm install
-npm test        # vitest 63本。ロジックとDOM操作
+npm test        # vitest 67本。ロジックとDOM操作
 npm run smoke   # 実ブラウザ(Chromium) 16項目。描画・保存・CSPの実効性
 ```
 
@@ -250,7 +254,7 @@ v2.0に至るまでに以下を検証して破棄した。同じ穴を掘り直�
 
 ```bash
 npm install
-npm test        # 63 passed
+npm test        # 67 passed
 npm run smoke   # 16/16 passed
 ```
 
