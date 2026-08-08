@@ -3,8 +3,8 @@
 個人用の朝の行動計測PWA。オーナーの幸福(flourishing)フレームワーク実装の一部として、
 Claude.ai チャット上で要件定義〜v2.0まで開発された。本書は Claude Code への引き継ぎ資料。
 
-- 最終更新: 2026-08-08 / 現行バージョン: **v2.3**(`index.html` 内 eyebrow 表記と一致させること)
-- テスト: `npm install && npm test`(vitest, 34本, 全パス)
+- 最終更新: 2026-08-08 / 現行バージョン: **v2.4**(`index.html` 内 eyebrow 表記と一致させること)
+- テスト: `npm install && npm test`(vitest 50本 + 実ブラウザ smoke 14項目、全パス)
 
 ### 名前について(v2.3で改称)
 
@@ -45,7 +45,7 @@ Claude.ai チャット上で要件定義〜v2.0まで開発された。本書は
 
 ---
 
-## 2. 現状(v2.3)
+## 2. 現状(v2.4)
 
 - **形態**: 依存ゼロの単一ファイルPWA(`index.html` のみ)。vanilla JS + インラインCSS + インラインSVGチャート。
   フレームワーク・CDN・ビルド工程なし(オフライン耐性と検証容易性のための意図的選択)。
@@ -63,10 +63,10 @@ Claude.ai チャット上で要件定義〜v2.0まで開発された。本書は
 | タブ | 内容 |
 |---|---|
 | 記録 | 日付ナビ(過去7日まで遡及入力可)/ 昨夜・今朝・昨日の3カード / 入力カウント / 日曜のみ週報誘導 |
-| 週 | 項目×7日のドットグリッド、達成数/目標、眠れた感の色ドット(計測のみ)、入力日数 |
+| 週 | 項目×7日のドットグリッド、達成数/目標、前週の達成数(前週に入力がある項目のみ)、眠れた感の色ドット(計測のみ)、入力日数 |
 | 推移 | 28日SVG折れ線: 就寝時刻・YouTube(達成ライン点線つき)・体重(数値がある場合のみ) |
 | 週報 | 今週サマリーチップ / 週報データコピー / 相関ヒント(φ係数、28日ロック) |
-| 設定 | 週目標ステッパー / 達成ライン / 項目表示トグル / カスタム項目 / CSV・JSONエクスポート / JSON取り込み(復元) / 退避データの取り出し(破損時のみ表示) / 2段階初期化 |
+| 設定 | 週目標ステッパー / 達成ライン / 項目表示トグル / カスタム項目 / 最終バックアップ日 / CSV・JSONエクスポート / JSONのファイル書き出し(共有API対応時のみ) / JSON取り込み(復元) / 退避データの取り出し(破損時のみ表示) / 2段階初期化 |
 
 ---
 
@@ -76,7 +76,8 @@ Claude.ai チャット上で要件定義〜v2.0まで開発された。本書は
 ```
 index.html        アプリ本体(style + script 全部入り)
 pwa.test.js       vitest テスト(実HTMLをJSDOMで起動して操作する統合テスト+ロジック単体)
-package.json      devDeps: vitest, jsdom のみ
+tools/smoke.mjs   実ブラウザ(Chromium)のスモークテスト。`npm run smoke`
+package.json      devDeps: vitest, jsdom, @playwright/test のみ(出荷物には依存ゼロ)
 vitest.config.js  environment: node(テスト側で手動JSDOMを構築するため)
 robots.txt        検索エンジンからの除外(Pages はURLを知れば誰でも開けるため)
 .gitattributes    改行を LF に固定(Windows編集で index.html が CRLF 化するのを防ぐ)
@@ -94,7 +95,8 @@ robots.txt        検索エンジンからの除外(Pages はURLを知れば誰�
 ### データモデル(localStorage `flourish-log-v2`)
 ```json
 {
-  "version": 2,
+  "version": 3,
+  "lastBackup": "2026-08-08",
   "targets": {"bedtime":5,"youtube":5,"ashwagandha":6,"creatine":6,"weight":5,"gym":3,"study":5},
   "th": {"bedtime":2,"youtube":1},
   "enabled": {"bedtime":true,"sleepFeel":true,"youtube":true,"ashwagandha":true,"creatine":true,"weight":true,"gym":true,"study":true},
@@ -120,7 +122,7 @@ robots.txt        検索エンジンからの除外(Pages はURLを知れば誰�
 ### 不変条件・約束事
 - **`migrate()` が後方互換の要。** スキーマ変更時は必ず `migrate()` を拡張し `version` を上げる。
   既存ユーザーデータ(JSON取り込み経由の旧データ含む)が壊れないことをテストで保証すること。
-- **`window.__flourish` テストフックを削除しない。** テストが依存(getS/setS/achieved/phi/buildCSV/weekStats/defaultData/migrate/fmt/weekStart/buildReviewText/KEY/save/render/brokenKeys/BROKEN_PREFIX)。
+- **`window.__flourish` テストフックを削除しない。** テストが依存(getS/setS/achieved/phi/buildCSV/weekStats/defaultData/migrate/fmt/weekStart/buildReviewText/KEY/save/render/brokenKeys/BROKEN_PREFIX/syncToday)。
 - 達成判定は `achieved(data, entry, id)` に一元化。週集計は `weekStats()`。φ係数は `phi()`(分母0は0を返す)。
 - 週の起点は月曜(`monIdx`)。日付キーはローカルタイム `YYYY-MM-DD`。
 - **保存データを読めなかったとき、原本を消さない(v2.1)。** `load()` は JSON.parse に失敗したら
@@ -138,6 +140,14 @@ robots.txt        検索エンジンからの除外(Pages はURLを知れば誰�
   `dataset` 経由で読むと元の文字列に戻るため、エスケープしても機能は変わらない。
 - **`migrate()` が型の境界(v2.2)。** JSON取り込みが唯一の外部入力経路なので、ここで
   `isPlainObject()` / `normCustom()` により型を揃える。これを通った後のコードは型を再検査しない。
+- **`lastBackup` は「実際に持ち出せた」ときだけ更新する(v2.4)。** JSONのクリップボードコピーが
+  成功したとき、またはファイル書き出し(`navigator.share`)が完了したときのみ。
+  CSVは復元できないので数えず、共有シートを閉じた(AbortError)場合も数えない。
+  過少申告は追加のバックアップを促すだけだが、過大申告は「守られている」という誤った安心を作る。
+- **`syncToday()` は「直前の今日」を見ていた場合だけ日付を送る(v2.4)。** ホーム画面PWAは
+  再読み込みされずに復帰しうるので、`sel` が前日のままだと翌朝の入力が前日の欄に入る。
+  ただし遡及入力の途中で復帰した人まで今日へ引き戻すと入力先が黙って変わるため、
+  `sel === lastToday` のときに限る。`lastToday` は `render()` が毎回更新する。
 - **外部通信をゼロに保つ(v2.2)。** CSP(`connect-src 'none'` ほか)を `<meta>` で宣言済み。
   通信を1本でも足すと CSP に阻まれ、テスト(「外部への通信コードとリソース参照を持たない」)も落ちる。
   仕様変更なしに `fetch` 等を足さないこと。バックログP2のAPI直呼びを実装する場合は、
@@ -174,13 +184,14 @@ robots.txt        検索エンジンからの除外(Pages はURLを知れば誰�
 
 ```bash
 npm install
-npm test        # = npx vitest run
+npm test        # vitest 50本。ロジックとDOM操作
+npm run smoke   # 実ブラウザ(Chromium) 14項目。描画・保存・CSPの実効性
 ```
 
 - 方式: 出荷物である `index.html` そのものを `JSDOM(html, {runScripts:"dangerously"})` で起動し、
   実DOMのボタンを `.click()` して `localStorage` の中身と再描画結果を検証する。
   復元テストは `beforeParse(w)` で localStorage をシードして「再起動」を再現。
-- 現行34本の範囲: 起動描画 / タップ→即時保存→✓表示 / 同値2タップで未入力化 / 再起動復元 /
+- 現行50本の範囲: 起動描画 / タップ→即時保存→✓表示 / 同値2タップで未入力化 / 再起動復元 /
   achieved・phi・buildCSV・週報テキストのロジック / 週タブのドットと達成数 / 相関ロック /
   CSVエクスポート / JSON取り込み / 2段階初期化 /
   破損データの退避・バナー・退避失敗時の保存停止・退避データの取り出し(4本) /
@@ -190,9 +201,12 @@ npm test        # = npx vitest run
   **表示名の3箇所一致・保存キーの据え置き(2本)**。
 - 非同期を検証するテストは `boot(seed, prepare)` の `prepare(w)` で起動前の環境
   (壊れた保存データ、`Storage.prototype.setItem` の失敗)を作り、`stubClipboard` + `await tick()` で待つ。
-- **CSPの実挙動は JSDOM では検証できない。** JSDOM は CSP を解釈しないため、テストは
-  meta タグの内容一致までしか見ていない。CSP を変更したときは実ブラウザで
-  「アプリが動くこと」と「外部へ出ないこと」を1度確認すること(§6)。
+- **CSPの実挙動は JSDOM では検証できない。** JSDOM は CSP を解釈しないため、vitest 側は
+  meta タグの内容一致までしか見ていない。実効性は `npm run smoke` が担当し、
+  記録を載せた fetch/XHR/beacon/画像/フォームを実際に投げて受信側に0件であることを確認する。
+  **CSPを触ったら `npm run smoke` を回すこと。**
+- JSDOM の癖: `document.visibilityState` の既定は `"visible"` ではなく `"prerender"`。
+  復帰の再現には `Object.defineProperty` で差し替える。時刻は `withClock()` で `window.Date` を差し替える。
 - **ルール: 全ての変更はテスト追加・更新とセット。デプロイ前に all green。**
   UIラベルはテストが `textContent` 一致で参照している(例: 「✓ した」「取り込む」「CSVをコピー」)。
   文言変更時はテストも更新すること。
@@ -202,14 +216,16 @@ npm test        # = npx vitest run
 ## 6. デプロイと運用
 
 - GitHub Pages。`main` の `/`(ルート)を配信元にしてあるので、`index.html` を push → 数分で自動反映。
-- **リリース手順**: (1) テスト all green → (2) `index.html` 内の eyebrow バージョン表記を上げる
-  (例 v2.3 → v2.4。`package.json` / `package-lock.json` の version も揃える)
+- **リリース手順**: (1) `npm test` と `npm run smoke` が all green → (2) `index.html` 内の eyebrow バージョン表記を上げる
+  (例 v2.4 → v2.5。`package.json` / `package-lock.json` の version も揃える)
   → (3) commit/push → (4) 実機Safariで再読み込みしバージョン表記で反映確認 →
   (5) 1タップして「✓ 保存済み」を確認。
 - **iOSの容器に注意**: ホーム画面追加したPWAとSafariタブは localStorage の容器が別。
   オーナーの運用は「ホームのアイコンから開く」に固定されている。デバッグで挙動差を見たらまずこれを疑う。
 - 古いHTMLをホーム画面PWAが掴み続けることがある(キャッシュ)。バージョン表記が上がらない場合は
   一度Safari側で開いて更新、それでもダメなら Service Worker 未導入なので単純なリロード問題。
+- **オフラインでは起動できない。** Service Worker がないため。Chromium で確認済み(`npm run smoke` の
+  INFO 行)。iOS Safari の挙動は未確認。圏外・機内モードで記録したい要件が出たら P2 の SW 導入を再検討する。
 - バックアップ: 設定タブ「JSONをコピー」(オーナーへは月1回程度を推奨済み)。復元は「取り込む」。
 - **このリポジトリは Public。** Pages を無料プランで公開するための選択。
   **リポジトリおよび本ドキュメントに個人情報を追記しないこと**(現状の内容はコードと設計判断のみ)。
@@ -262,12 +278,8 @@ v2.0に至るまでに以下を検証して破棄した。同じ穴を掘り直�
 
 **P1**
 - 実機での長期永続性の観察(iOS/WebKitのサイトデータ削除ポリシーとホーム画面PWA容器の挙動)。
-  月1バックアップをアプリ内で軽く促す仕組み(例: 設定タブに最終エクスポート日を表示)。ただし通知圧は禁止。
+  最終バックアップ日の表示とファイル書き出しは v2.4 で入れた。残るのは**実際に消えるかの観察**。
 - 遡及入力の上限(現在7日)の妥当性レビュー。
-- **日付またぎで `sel` が今日に追随しない(未確認)。** `sel` は起動時の `fmt(new Date())` のみで、
-  以降は日付ナビでしか変わらない。アプリを開いたまま日付が変わり、かつ再読み込みが走らない場合、
-  翌朝の入力が前日の欄に入りうる。iOSホーム画面PWAが復帰時に再読み込みされるかは実機未確認。
-  対処するなら `visibilitychange` で today と `sel` を突き合わせる案。まず実機確認から。
 
 **P2**
 - Service Worker 導入(オフライン完全化+更新制御)。導入時は**キャッシュ無効化戦略を先に設計**
@@ -281,7 +293,17 @@ v2.0に至るまでに以下を検証して破棄した。同じ穴を掘り直�
 - Web Push(iOSホーム画面PWAで技術的には可能だが、現状はiOSリマインダーで充足しており優先度低)。
 - 項目タイプの拡張(数値項目の汎用化)。追加時も入力20秒制約を守ること。
 
-**やらないこと(恒久)**: ストリーク表示 / ソーシャル比較 / 実績バッジ / 広告的演出 / ダークパターン。
+### やらないこと(恒久)
+
+ストリーク表示 / ソーシャル比較 / 実績バッジ / 広告的演出 / ダークパターン。
+
+**残数カウント・督促表示も含む(v2.4で追加)。** 例:「今週あと2回で目標達成」「バックアップしましょう」。
+週次達成率の枠内に見えるため自然な改善として足したくなるが、実質は行動を促す装置であり、
+§1 の役割定義(アプリは計測層に限定)と制約5(反ドーパミン設計)に抵触する。
+事実の提示(「3/5」「最後のバックアップ: 8/8(32日前)」)は可、**行動の指示は不可**という線で引く。
+
+前週の達成数の併記(v2.4)はこの線の内側と判断した。理由は、比較そのものが週次フィードバックの目的であり、
+週報テキストが既に前週データをClaudeへ渡しているため。ただし増減の矢印・色は付けない(評価になるため)。
 
 ---
 
@@ -298,7 +320,9 @@ v2.0に至るまでに以下を検証して破棄した。同じ穴を掘り直�
 ## クイックスタート(Claude Code 初回セッション用)
 
 ```bash
-npm install && npm test      # 34 passed を確認してから作業開始
+npm install
+npm test        # 50 passed を確認してから作業開始
+npm run smoke   # 14/14 passed を確認
 ```
 1. 本書 §1 の設計制約を読む(これが受け入れ基準)。
 2. 変更 → テスト追加/更新 → all green → バージョン表記を上げて commit。

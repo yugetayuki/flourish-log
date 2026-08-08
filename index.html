@@ -119,7 +119,7 @@ svg{display:block}
 <body>
 <div id="wrap">
   <header>
-    <div class="title"><h1>Aubade</h1><span class="eyebrow mono">DAWN&nbsp;LOG&nbsp;·&nbsp;v2.3</span></div>
+    <div class="title"><h1>Aubade</h1><span class="eyebrow mono">DAWN&nbsp;LOG&nbsp;·&nbsp;v2.4</span></div>
     <span id="saveState"></span>
   </header>
   <div id="banner"></div>
@@ -159,12 +159,13 @@ function md(s){ return (+s.slice(5,7))+"/"+(+s.slice(8,10)); }
 /* ================= データ ================= */
 function defaultData(){
   return {
-    version: 2,
+    version: 3,
     targets: {bedtime:5, youtube:5, ashwagandha:6, creatine:6, weight:5, gym:3, study:5},
     th: {bedtime:2, youtube:1},
     enabled: {bedtime:true, sleepFeel:true, youtube:true, ashwagandha:true, creatine:true, weight:true, gym:true, study:true},
     custom: [],
     entries: {},
+    lastBackup: null,
   };
 }
 function isPlainObject(v){ return !!v && typeof v === "object" && !Array.isArray(v); }
@@ -184,7 +185,8 @@ function normCustom(list){
 function migrate(d){
   var b = defaultData();
   var o = Object.assign({}, b, isPlainObject(d) ? d : {});
-  o.version = 2;
+  o.version = 3; // v3 で lastBackup を追加。旧データは Object.assign で null が入る
+  o.lastBackup = (d && typeof d.lastBackup === "string") ? d.lastBackup : null;
   o.targets = Object.assign({}, b.targets, isPlainObject(d && d.targets) ? d.targets : {});
   o.th = Object.assign({}, b.th, isPlainObject(d && d.th) ? d.th : {});
   o.enabled = Object.assign({}, b.enabled, isPlainObject(d && d.enabled) ? d.enabled : {});
@@ -310,7 +312,9 @@ function brokenKeys(){
 var S = load();
 var tab = "log";
 var sel = fmt(new Date());
-var expText = null, expNote = "", revText = null, revNote = "", setNote = "", armed = false, armTimer = null;
+var lastToday = sel; // 前回の描画時点で「今日」だった日付。復帰時の日付またぎ検出に使う
+var expText = null, expNote = "", revText = null, revNote = "";
+var setNote = "", setNoteOk = false, armed = false, armTimer = null;
 var saveTimer = null;
 
 function esc(s){
@@ -336,6 +340,37 @@ function flash(msg, isErr){
   if (!isErr) saveTimer = setTimeout(function(){ el.textContent=""; }, 1500);
 }
 // writeText は Promise を返すため、同期 try/catch だけでは拒否を取りこぼして「コピーしました」と嘘をつく
+// 端末の紛失やサイトデータ削除は退避キーでは救えない。復元できるのはJSONの持ち出しだけなので、
+// JSONを実際に持ち出せたときだけ記録する(CSVは復元できないので数えない)
+function markBackup(){
+  S.lastBackup = fmt(new Date());
+  save();
+}
+function shareBackup(){
+  var name = "aubade-backup-" + fmt(new Date()) + ".json";
+  var file;
+  try { file = new File([JSON.stringify(S, null, 2)], name, {type:"application/json"}); }
+  catch(e) {
+    console.error("[flourish] バックアップファイルを作れませんでした", e);
+    setNote = "この端末では共有できません。「JSONをコピー」を使ってください"; setNoteOk = false;
+    render(); return;
+  }
+  if (!navigator.canShare || !navigator.canShare({files:[file]})) {
+    setNote = "この端末はファイル共有に対応していません。「JSONをコピー」を使ってください"; setNoteOk = false;
+    render(); return;
+  }
+  navigator.share({files:[file], title:name}).then(function(){
+    markBackup();
+    setNote = "書き出しました: " + name; setNoteOk = true;
+    render();
+  }, function(e){
+    // 共有シートを閉じた場合も reject するので、中止と失敗を区別する
+    if (e && e.name === "AbortError") { setNote = "書き出しを中止しました"; }
+    else { console.error("[flourish] 共有に失敗しました", e); setNote = "書き出しに失敗しました"; }
+    setNoteOk = false;
+    render();
+  });
+}
 function copyText(t, done){
   var p;
   try { p = navigator.clipboard && navigator.clipboard.writeText(t); }
@@ -435,12 +470,14 @@ function viewWeek(today){
   var logged = days.filter(function(dt){ return dt<=today && S.entries[dt]; }).length;
   var passed = days.filter(function(dt){ return dt<=today; }).length;
   var items = allItems(S).filter(function(it){ return S.enabled[it.id] !== false; });
+  // weekStats も同じ allItems→enabled の順で並べるので添字が一致する
+  var prev = weekStats(S, addDays(ws,-7), today).items;
 
   var h = '<div class="card"><div class="chead"><span class="ctitle">今週 '+md(days[0])+' – '+md(days[6])+'</span>'
     + '<span class="cright mono">入力 '+logged+'/'+passed+'日</span></div>';
   h += '<div class="dhead">'+WDAY.map(function(w){return '<span class="dh">'+w+'</span>';}).join("")+'</div>';
 
-  items.forEach(function(it){
+  items.forEach(function(it, i){
     var ok=0, dots='';
     days.forEach(function(dt){
       var st;
@@ -452,8 +489,12 @@ function viewWeek(today){
       dots += '<span class="dot '+st+'"></span>';
     });
     var hit = ok >= it.tgt;
+    // 前週は数値のみ。増減の矢印や色を付けると「下がった」という評価になり、比較の目的から外れる
+    var p = prev[i];
+    var pnote = (p && p.entered > 0) ? '<span class="wc mono" style="color:var(--dim)">前週 '+p.ok+'</span>' : '';
     h += '<div class="wrow"><div class="wname"><span class="wl">'+esc(it.label)+'</span>'
-      + '<span class="wc mono" style="color:'+(hit?'var(--pine)':'var(--sub)')+'">'+ok+'/'+it.tgt+'</span></div>'
+      + '<span class="wc mono" style="color:'+(hit?'var(--pine)':'var(--sub)')+'">'+ok+'/'+it.tgt+'</span>'
+      + pnote + '</div>'
       + '<div class="dots">'+dots+'</div></div>';
   });
 
@@ -544,7 +585,7 @@ function viewReview(today){
   h += '<button class="bigbtn" data-action="copyreview"'+(stats.logged===0?' disabled style="background:var(--dim)"':'')+'>週報用データをコピー</button>';
   h += '<p class="foot">コピーしてClaudeのチャット(このプロジェクト)に貼り付けると、【事実】【解釈】【来週の一点】形式の週次レビューが返ってきます。</p>';
   if (revText != null) {
-    h += '<p class="note" style="color:'+(revNote.indexOf("しました")>=0?'var(--pine)':'var(--sub)')+'">'+esc(revNote)+'</p>';
+    h += '<p class="note" id="revnote" style="color:'+(revNote.indexOf("しました")>=0?'var(--pine)':'var(--sub)')+'">'+esc(revNote)+'</p>';
     h += '<textarea readonly rows="5" id="revout">'+esc(revText)+'</textarea>';
   }
 
@@ -585,6 +626,14 @@ function viewReview(today){
 }
 
 /* ================= 設定 ================= */
+// 事実だけを淡々と出す。「バックアップしましょう」のような催促文言・バッジ・通知は置かない(設計制約5)
+function backupLine(){
+  if (!S.lastBackup) return '<p class="note" id="backupline" style="color:var(--sienna)">まだバックアップしていません。</p>';
+  var days = Math.round((parseD(fmt(new Date())) - parseD(S.lastBackup)) / 86400000);
+  var when = days <= 0 ? "今日" : days + "日前";
+  return '<p class="note mono" id="backupline" style="color:'+(days >= 60 ? "var(--sienna)" : "var(--sub)")+'">'
+    + '最後のバックアップ: ' + md(S.lastBackup) + '(' + when + ')</p>';
+}
 function viewSettings(){
   var h = '<div class="card"><div class="chead"><span class="ctitle">週の目標</span></div>';
   CORE.forEach(function(c){
@@ -628,16 +677,20 @@ function viewSettings(){
 
   h += '<div class="card"><div class="chead"><span class="ctitle">データ</span>'
     + '<span class="cright mono">'+Object.keys(S.entries).length+'日分</span></div>';
+  h += backupLine();
   h += '<div class="half"><button class="ghost" data-action="expcsv">CSVをコピー</button>'
     + '<button class="ghost" data-action="expjson">JSONをコピー</button></div>';
+  if (typeof navigator.share === "function") {
+    h += '<button class="ghost" style="margin-top:6px" data-action="sharejson">JSONをファイルで書き出す</button>';
+  }
   if (expText != null) {
-    h += '<p class="note" style="color:'+(expNote.indexOf("しました")>=0?'var(--pine)':'var(--sub)')+'">'+esc(expNote)+'</p>';
+    h += '<p class="note" id="expnote" style="color:'+(expNote.indexOf("しました")>=0?'var(--pine)':'var(--sub)')+'">'+esc(expNote)+'</p>';
     h += '<textarea readonly rows="4" id="exp" class="mono">'+esc(expText)+'</textarea>';
   }
   h += '<div style="padding:8px 0 4px"><p class="note" style="color:var(--sub)">復元/移行: JSONを下に貼り付けて取り込み</p>'
     + '<textarea rows="3" id="imp" class="mono" placeholder="ここにJSONを貼り付け"></textarea>'
     + '<button class="ghost" style="margin-top:6px" data-action="import">取り込む</button>';
-  if (setNote) h += '<p class="note" style="color:'+(setNote.indexOf("完了")>=0?'var(--pine)':'var(--sienna)')+'">'+esc(setNote)+'</p>';
+  if (setNote) h += '<p class="note" id="setnote" style="color:'+(setNoteOk?'var(--pine)':'var(--sienna)')+'">'+esc(setNote)+'</p>';
   h += '</div>';
 
   var bks = brokenKeys();
@@ -658,7 +711,7 @@ function viewSettings(){
   h += '</div></div>';
 
   h += '<p class="foot">データはこの端末のブラウザ(このアプリ)内にのみ保存されます。バックアップはJSONコピーで。'
-    + 'このアプリの役割は計測と週次フィードバックまで — 行動を変えるのは環境設計の仕事です。 v2.3</p>';
+    + 'このアプリの役割は計測と週次フィードバックまで — 行動を変えるのは環境設計の仕事です。 v2.4</p>';
   return h;
 }
 
@@ -671,6 +724,7 @@ function render(){
     : tab==="trend" ? viewTrend(today)
     : tab==="review" ? viewReview(today)
     : viewSettings();
+  lastToday = today;
   document.getElementById("banner").innerHTML =
     loadError ? '<div class="banner err">'+esc(loadError)+'</div>' : "";
   document.getElementById("view").innerHTML = v;
@@ -678,6 +732,21 @@ function render(){
     return '<button class="tb'+(tab===t[0]?' on':'')+'" data-nav="'+t[0]+'">'+t[1]+'</button>';
   }).join("");
 }
+
+/* ================= 日付またぎ ================= */
+// ホーム画面PWAは再読み込みされずに復帰することがある。その場合 sel は昨日のままなので、
+// 「今日」を見ていた人が翌朝そのまま入力すると前日の欄に書き込んでしまう。
+// 過去日を自分で選んで見ている人まで今日へ引き戻さないよう、直前の「今日」と一致する場合だけ送る。
+function syncToday(){
+  var today = fmt(new Date());
+  if (today === lastToday) return;
+  if (sel === lastToday) sel = today;
+  render();
+}
+document.addEventListener("visibilitychange", function(){
+  if (document.visibilityState === "visible") syncToday();
+});
+window.addEventListener("focus", syncToday);
 
 /* ================= イベント ================= */
 document.addEventListener("click", function(ev){
@@ -736,13 +805,20 @@ document.addEventListener("click", function(ev){
     save(); render(); return;
   }
   if (a === "expcsv" || a === "expjson") {
-    expText = a==="expcsv" ? buildCSV(S) : JSON.stringify(S, null, 2);
+    var isJson = a === "expjson";
+    expText = isJson ? JSON.stringify(S, null, 2) : buildCSV(S);
     // 成功が確定するまでは手動コピーの案内を出しておく(失敗したまま残っても嘘にならない)
     expNote = "コピーできない場合は下を長押しして選択してください";
     render();
-    copyText(expText, function(ok){ if (ok) { expNote = "コピーしました"; render(); } });
+    copyText(expText, function(ok){
+      if (!ok) return;
+      expNote = "コピーしました";
+      if (isJson) markBackup();
+      render();
+    });
     return;
   }
+  if (a === "sharejson") { shareBackup(); return; }
   if (a === "showbroken") {
     var bk = ac.dataset.key;
     try { expText = localStorage.getItem(bk) || ""; expNote = "退避データです。長押しでコピーし、下の取り込み欄に貼り付けてください"; }
@@ -762,10 +838,10 @@ document.addEventListener("click", function(ev){
       var parsed = JSON.parse(ta.value);
       if (!isPlainObject(parsed)) throw new Error("最上位がオブジェクトではありません");
       S = migrate(parsed);
-      save(); setNote = "取り込み完了(" + Object.keys(S.entries).length + "日分)";
+      save(); setNote = "取り込み完了(" + Object.keys(S.entries).length + "日分)"; setNoteOk = true;
     } catch(e) {
       console.error("[flourish] 取り込みに失敗しました", e);
-      setNote = "取り込み失敗: JSONを確認してください";
+      setNote = "取り込み失敗: JSONを確認してください"; setNoteOk = false;
     }
     render(); return;
   }
@@ -798,7 +874,7 @@ window.__flourish = {
   save: save, render: render,
   achieved: achieved, phi: phi, buildCSV: buildCSV, weekStats: weekStats,
   defaultData: defaultData, migrate: migrate, fmt: fmt, weekStart: weekStart,
-  buildReviewText: buildReviewText, KEY: KEY,
+  buildReviewText: buildReviewText, KEY: KEY, syncToday: syncToday,
   brokenKeys: brokenKeys, BROKEN_PREFIX: BROKEN_PREFIX,
 };
 

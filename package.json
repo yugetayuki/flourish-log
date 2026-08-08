@@ -1,12 +1,14 @@
 {
   "name": "flourish-log",
-  "version": "2.3.0",
+  "version": "2.4.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "vitest run"
+    "test": "vitest run",
+    "smoke": "node tools/smoke.mjs"
   },
   "devDependencies": {
+    "@playwright/test": "^1.61.0",
     "jsdom": "^24.0.0",
     "vitest": "^4.0.0"
   }

@@ -22,11 +22,28 @@ const byText = (dom, sel, text) => qa(dom, sel).find((el) => el.textContent.trim
 const tick = () => new Promise((r) => setTimeout(r, 0));
 const stubClipboard = (dom, impl) => { dom.window.navigator.clipboard = { writeText: impl }; };
 
-describe("PWA v2.3: 起動と基本描画", () => {
-  it("記録タブが描画され、v2.3表示がある", () => {
+// アプリは new Date() を直接読むので、JSDOM 側の Date を差し替えて日付またぎを再現する
+const withClock = (iso) => (w) => {
+  let now = Date.parse(iso);
+  const Real = w.Date;
+  function Fake(...a) { return a.length ? new Real(...a) : new Real(now); }
+  Fake.prototype = Real.prototype;
+  Fake.now = () => now;
+  Fake.parse = Real.parse;
+  Fake.UTC = Real.UTC;
+  w.Date = Fake;
+  w.__advanceTo = (s) => { now = Date.parse(s); };
+};
+const stubShare = (impl) => (w) => {
+  w.navigator.share = impl;
+  w.navigator.canShare = () => true;
+};
+
+describe("PWA v2.4: 起動と基本描画", () => {
+  it("記録タブが描画され、v2.4表示がある", () => {
     const dom = boot();
     expect(q(dom, "#view").textContent).toContain("就寝時刻");
-    expect(q(dom, ".eyebrow").textContent).toContain("v2.3");
+    expect(q(dom, ".eyebrow").textContent).toContain("v2.4");
   });
 
   it("正常起動では警告バナーを出さない", () => {
@@ -51,7 +68,7 @@ describe("PWA v2.3: 起動と基本描画", () => {
   });
 });
 
-describe("PWA v2.3: 保存と復元", () => {
+describe("PWA v2.4: 保存と復元", () => {
   it("タップ→localStorageに即保存され✓保存済みが出る", () => {
     const dom = boot();
     byText(dom, "button.sb", "✓ した").click(); // 最初の「した」=アシュワガンダ
@@ -80,7 +97,7 @@ describe("PWA v2.3: 保存と復元", () => {
   });
 });
 
-describe("PWA v2.3: ロジック(移植の同一性)", () => {
+describe("PWA v2.4: ロジック(移植の同一性)", () => {
   it("achieved: 就寝ライン/チェック/未入力", () => {
     const f = boot().window.__flourish;
     const d = f.defaultData();
@@ -117,7 +134,7 @@ describe("PWA v2.3: ロジック(移植の同一性)", () => {
   });
 });
 
-describe("PWA v2.3: 週タブ・週報タブ", () => {
+describe("PWA v2.4: 週タブ・週報タブ", () => {
   it("週タブ: 達成した項目が1/6と表示されドットが出る", () => {
     const f0 = boot().window.__flourish;
     const d = f0.defaultData();
@@ -136,7 +153,7 @@ describe("PWA v2.3: 週タブ・週報タブ", () => {
   });
 });
 
-describe("PWA v2.3: 設定タブ", () => {
+describe("PWA v2.4: 設定タブ", () => {
   it("CSVエクスポート: テキストエリアにdate,ヘッダーが出る", () => {
     const dom = boot();
     byText(dom, "button.tb", "設定").click();
@@ -172,7 +189,7 @@ describe("PWA v2.3: 設定タブ", () => {
   });
 });
 
-describe("PWA v2.3: 壊れた保存データを黙って消さない", () => {
+describe("PWA v2.4: 壊れた保存データを黙って消さない", () => {
   const BROKEN = '{"version":2,"entries":{"2026-08-01":{"gym":true}'; // 末尾が欠けたJSON
 
   it("解析に失敗したら警告バナーを出し、原本を退避キーへ移す", () => {
@@ -215,7 +232,7 @@ describe("PWA v2.3: 壊れた保存データを黙って消さない", () => {
   });
 });
 
-describe("PWA v2.3: コピー結果を偽らない", () => {
+describe("PWA v2.4: コピー結果を偽らない", () => {
   const openExport = (dom) => {
     byText(dom, "button.tb", "設定").click();
     byText(dom, "button.ghost", "CSVをコピー").click();
@@ -226,7 +243,7 @@ describe("PWA v2.3: コピー結果を偽らない", () => {
     stubClipboard(dom, () => Promise.resolve());
     openExport(dom);
     await tick();
-    expect(q(dom, ".note").textContent).toContain("コピーしました");
+    expect(q(dom, "#expnote").textContent).toContain("コピーしました");
   });
 
   it("クリップボードが拒否されたら「コピーしました」と言わず手動コピーを案内する", async () => {
@@ -234,7 +251,7 @@ describe("PWA v2.3: コピー結果を偽らない", () => {
     stubClipboard(dom, () => Promise.reject(new Error("denied")));
     openExport(dom);
     await tick();
-    const note = q(dom, ".note").textContent;
+    const note = q(dom, "#expnote").textContent;
     expect(note).not.toContain("コピーしました");
     expect(note).toContain("長押し");
     expect(q(dom, "#exp").value.startsWith("date,")).toBe(true);
@@ -249,7 +266,7 @@ describe("PWA v2.3: コピー結果を偽らない", () => {
     byText(dom, "button.tb", "週報").click();
     byText(dom, "button.bigbtn", "週報用データをコピー").click();
     await tick();
-    expect(q(dom, ".note").textContent).not.toContain("コピーしました");
+    expect(q(dom, "#revnote").textContent).not.toContain("コピーしました");
     expect(q(dom, "#revout").value).toContain("【事実】");
   });
 
@@ -261,7 +278,7 @@ describe("PWA v2.3: コピー結果を偽らない", () => {
   });
 });
 
-describe("PWA v2.3: CSVの列ずれ", () => {
+describe("PWA v2.4: CSVの列ずれ", () => {
   it("カンマを含むカスタム項目名でも列数が一致する", () => {
     const f = boot().window.__flourish;
     const d = f.defaultData();
@@ -282,7 +299,7 @@ describe("PWA v2.3: CSVの列ずれ", () => {
   });
 });
 
-describe("PWA v2.3: 配信ポリシー", () => {
+describe("PWA v2.4: 配信ポリシー", () => {
   it("CSPで外部への持ち出し経路を塞いでいる", () => {
     const csp = q(boot(), 'meta[http-equiv="Content-Security-Policy"]');
     expect(csp).not.toBe(null);
@@ -306,7 +323,7 @@ describe("PWA v2.3: 配信ポリシー", () => {
   });
 });
 
-describe("PWA v2.3: 取り込んだJSONを信用しない", () => {
+describe("PWA v2.4: 取り込んだJSONを信用しない", () => {
   const EVIL = 'c_x" data-action="reset2';
   const importJson = (dom, data) => {
     byText(dom, "button.tb", "設定").click();
@@ -368,5 +385,167 @@ describe("PWA v2.3: 取り込んだJSONを信用しない", () => {
     importJson(dom, [{ entries: {} }]);
     expect(q(dom, "#view").textContent).toContain("取り込み失敗");
     expect(f.getS().custom).toEqual([]);
+  });
+
+  it("lastBackup を持たない v2 データも読める", () => {
+    const f = boot().window.__flourish;
+    const m = f.migrate({ version: 2, entries: { "2026-08-01": { gym: true } } });
+    expect(m.version).toBe(3);
+    expect(m.lastBackup).toBe(null);
+    expect(m.entries["2026-08-01"].gym).toBe(true);
+  });
+});
+
+describe("PWA v2.4: 日付またぎ", () => {
+  const dateT = (dom) => q(dom, ".dateT").textContent;
+
+  it("復帰時に日付が変わっていたら、今日を見ていた人を今日へ送る", () => {
+    const dom = boot(null, withClock("2026-08-08T09:00"));
+    expect(dateT(dom)).toContain("8/8");
+    dom.window.__advanceTo("2026-08-09T07:00");
+    dom.window.dispatchEvent(new dom.window.Event("focus"));
+    expect(dateT(dom)).toContain("8/9");
+    expect(dateT(dom)).toContain("今日");
+  });
+
+  // JSDOM の document.visibilityState は既定が "prerender" なので、実ブラウザの復帰状態を作る
+  it("visibilitychange でも追随する", () => {
+    const dom = boot(null, withClock("2026-08-08T09:00"));
+    Object.defineProperty(dom.window.document, "visibilityState", { value: "visible", configurable: true });
+    dom.window.__advanceTo("2026-08-09T07:00");
+    dom.window.document.dispatchEvent(new dom.window.Event("visibilitychange"));
+    expect(dateT(dom)).toContain("8/9");
+  });
+
+  it("画面が隠れているときは何もしない", () => {
+    const dom = boot(null, withClock("2026-08-08T09:00"));
+    Object.defineProperty(dom.window.document, "visibilityState", { value: "hidden", configurable: true });
+    dom.window.__advanceTo("2026-08-09T07:00");
+    dom.window.document.dispatchEvent(new dom.window.Event("visibilitychange"));
+    expect(dateT(dom)).toContain("8/8");
+  });
+
+  // 遡及入力の途中で復帰したときに今日へ引き戻すと、入力先が黙って変わってしまう
+  it("自分で過去日を選んでいる場合は引き戻さない", () => {
+    const dom = boot(null, withClock("2026-08-08T09:00"));
+    byText(dom, "button.navbtn", "‹").click();
+    expect(dateT(dom)).toContain("8/7");
+    dom.window.__advanceTo("2026-08-09T07:00");
+    dom.window.dispatchEvent(new dom.window.Event("focus"));
+    expect(dateT(dom)).toContain("8/7");
+  });
+
+  it("日付が変わっていなければ何もしない", () => {
+    const dom = boot(null, withClock("2026-08-08T09:00"));
+    byText(dom, "button.navbtn", "‹").click();
+    dom.window.__advanceTo("2026-08-08T18:00");
+    dom.window.dispatchEvent(new dom.window.Event("focus"));
+    expect(dateT(dom)).toContain("8/7");
+  });
+});
+
+describe("PWA v2.4: バックアップの記録", () => {
+  const openSettings = (dom) => byText(dom, "button.tb", "設定").click();
+  const ago = (f, n) => { const d = new Date(); d.setDate(d.getDate() - n); return f.fmt(d); };
+
+  it("初期状態では未バックアップと表示する", () => {
+    const dom = boot();
+    openSettings(dom);
+    expect(q(dom, "#backupline").textContent).toContain("まだバックアップしていません");
+  });
+
+  it("JSONのコピーが成功したらバックアップ日を記録する", async () => {
+    const dom = boot();
+    stubClipboard(dom, () => Promise.resolve());
+    openSettings(dom);
+    byText(dom, "button.ghost", "JSONをコピー").click();
+    await tick();
+    const f = dom.window.__flourish;
+    expect(f.getS().lastBackup).toBe(f.fmt(new Date()));
+    expect(q(dom, "#backupline").textContent).toContain("今日");
+  });
+
+  // CSVからは復元できないので、コピーしてもバックアップにはならない
+  it("CSVのコピーはバックアップに数えない", async () => {
+    const dom = boot();
+    stubClipboard(dom, () => Promise.resolve());
+    openSettings(dom);
+    byText(dom, "button.ghost", "CSVをコピー").click();
+    await tick();
+    expect(dom.window.__flourish.getS().lastBackup).toBe(null);
+  });
+
+  it("コピーが拒否されたらバックアップに数えない", async () => {
+    const dom = boot();
+    stubClipboard(dom, () => Promise.reject(new Error("denied")));
+    openSettings(dom);
+    byText(dom, "button.ghost", "JSONをコピー").click();
+    await tick();
+    expect(dom.window.__flourish.getS().lastBackup).toBe(null);
+  });
+
+  it("経過日数を出し、間隔が空いたら色を変える", () => {
+    const f0 = boot().window.__flourish;
+    const mk = (n) => { const d = f0.defaultData(); d.lastBackup = ago(f0, n); return JSON.stringify(d); };
+    const recent = boot(mk(10));
+    openSettings(recent);
+    expect(q(recent, "#backupline").textContent).toContain("10日前");
+    expect(q(recent, "#backupline").getAttribute("style")).toContain("--sub");
+    const stale = boot(mk(70));
+    openSettings(stale);
+    expect(q(stale, "#backupline").getAttribute("style")).toContain("--sienna");
+  });
+
+  it("共有APIが無い端末では書き出しボタンを出さない", () => {
+    const dom = boot();
+    openSettings(dom);
+    expect(q(dom, '[data-action="sharejson"]')).toBe(null);
+  });
+
+  it("ファイル書き出しに成功したらバックアップ日を記録する", async () => {
+    const dom = boot(null, stubShare(() => Promise.resolve()));
+    openSettings(dom);
+    q(dom, '[data-action="sharejson"]').click();
+    await tick();
+    const f = dom.window.__flourish;
+    expect(f.getS().lastBackup).toBe(f.fmt(new Date()));
+    expect(q(dom, "#setnote").textContent).toContain("書き出しました");
+  });
+
+  // 共有シートを閉じただけで「バックアップ済み」になると、実際には守られていないのに安心してしまう
+  it("共有シートを閉じた場合はバックアップに数えない", async () => {
+    const abort = Object.assign(new Error("cancelled"), { name: "AbortError" });
+    const dom = boot(null, stubShare(() => Promise.reject(abort)));
+    openSettings(dom);
+    q(dom, '[data-action="sharejson"]').click();
+    await tick();
+    expect(dom.window.__flourish.getS().lastBackup).toBe(null);
+    expect(q(dom, "#setnote").textContent).toContain("中止");
+  });
+});
+
+describe("PWA v2.4: 週タブの前週併記", () => {
+  const prevWeekDay = (f, n) => {
+    const ws = f.weekStart(new Date());
+    const d = new Date(ws);
+    d.setDate(d.getDate() - 7 + n);
+    return f.fmt(d);
+  };
+
+  it("前週に入力があれば達成数を併記する", () => {
+    const f0 = boot().window.__flourish;
+    const d = f0.defaultData();
+    d.entries[prevWeekDay(f0, 0)] = { gym: true };
+    d.entries[prevWeekDay(f0, 1)] = { gym: true };
+    const dom = boot(JSON.stringify(d));
+    byText(dom, "button.tb", "週").click();
+    expect(q(dom, "#view").textContent).toContain("前週 2");
+  });
+
+  // 初週に「前週 0」が並ぶと、記録がないだけなのに未達成に見える
+  it("前週に入力がなければ前週欄を出さない", () => {
+    const dom = boot();
+    byText(dom, "button.tb", "週").click();
+    expect(q(dom, "#view").textContent).not.toContain("前週");
   });
 });
