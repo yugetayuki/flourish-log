@@ -38,7 +38,8 @@ Claude.ai チャット上で要件定義〜v2.0まで開発された。本書は
 - **形態**: 依存ゼロの単一ファイルPWA(`index.html` のみ)。vanilla JS + インラインCSS + インラインSVGチャート。
   フレームワーク・CDN・ビルド工程なし(オフライン耐性と検証容易性のための意図的選択)。
 - **保存**: `localStorage`、キー `flourish-log-v2`、即時書き込み。
-- **ホスティング**: GitHub Pages(リポジトリ名・URLはオーナーに確認)。`index.html` をcommitすると数分で反映。
+- **ホスティング**: GitHub Pages。リポジトリ https://github.com/yugetayuki/flourish-log (Public) /
+  公開URL https://yugetayuki.github.io/flourish-log/ 。`main` に push すると数分で反映。
 - **通知**: アプリ自体は通知を持たない。OS標準のリマインダーを朝の決まった時刻に1本置く運用に委ねる
   (設定済み。具体的な時刻はオーナーの生活時間に合わせてある)。アプリ側に通知・催促を追加しないこと(設計制約5)。
 - **週次AIレビュー**: アプリ内生成ではない。週報タブ「週報用データをコピー」→ オーナーが
@@ -170,7 +171,7 @@ npm test        # = npx vitest run
 
 ## 6. デプロイと運用
 
-- GitHub Pages。`index.html` をmainにcommit → 数分で自動反映。
+- GitHub Pages。`main` の `/`(ルート)を配信元にしてあるので、`index.html` を push → 数分で自動反映。
 - **リリース手順**: (1) テスト all green → (2) `index.html` 内の eyebrow バージョン表記を上げる
   (例 v2.1 → v2.2。`package.json` / `package-lock.json` の version も揃える)
   → (3) commit/push → (4) 実機Safariで再読み込みしバージョン表記で反映確認 →
@@ -180,8 +181,9 @@ npm test        # = npx vitest run
 - 古いHTMLをホーム画面PWAが掴み続けることがある(キャッシュ)。バージョン表記が上がらない場合は
   一度Safari側で開いて更新、それでもダメなら Service Worker 未導入なので単純なリロード問題。
 - バックアップ: 設定タブ「JSONをコピー」(オーナーへは月1回程度を推奨済み)。復元は「取り込む」。
-- リポジトリをPublicで運用する場合、**このリポジトリおよび本ドキュメントに個人情報を追記しないこと**
-  (現状の内容はコードと設計判断のみで構成してある)。
+- **このリポジトリは Public。** Pages を無料プランで公開するための選択。
+  **リポジトリおよび本ドキュメントに個人情報を追記しないこと**(現状の内容はコードと設計判断のみ)。
+  記録された実データは端末の localStorage にのみ存在し、リポジトリには一切入らない。
 
 ---
 
