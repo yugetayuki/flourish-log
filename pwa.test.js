@@ -117,10 +117,10 @@ describe("PWA v2.4: ロジック(移植の同一性)", () => {
   it("buildCSV: ラベル/1/0/空の変換", () => {
     const f = boot().window.__flourish;
     const d = f.defaultData();
-    d.entries["2026-08-08"] = { bedtime: 4, wake: 1, sleepFeel: 1, youtube: 0, ashwagandha: false, creatine: true, weight: true, weightVal: "68.5", gym: false, study: true };
+    d.entries["2026-08-08"] = { bedtime: 4, wake: 1, sleepFeel: 1, youtube: 0, ashwagandha: false, coffee: true, creatine: true, weight: true, weightVal: "68.5", gym: false, study: true };
     const [head, row] = f.buildCSV(d).split("\n");
     expect(head).toContain("就寝時刻");
-    expect(row).toBe("2026-08-08,以降,〜6:30,普通,<30分,0,1,1,68.5,0,1");
+    expect(row).toBe("2026-08-08,以降,〜6:30,普通,<30分,0,1,1,1,68.5,0,1");
   });
 
   it("週報コピー用テキストに凡例と今週/前週JSONが含まれる", () => {
@@ -287,7 +287,7 @@ describe("PWA v2.4: CSVの列ずれ", () => {
     const [head, row] = f.buildCSV(d).split("\n");
     expect(head).toContain('"読書, 英語"');
     expect(head.split('"').length).toBe(3); // 引用符は1フィールド分の2つだけ
-    expect(row).toBe("2026-08-08,,,,,,,,,1,,1");
+    expect(row).toBe("2026-08-08,,,,,,,,,,1,,1");
   });
 
   it("引用符を含むラベルは二重引用符でエスケープする", () => {
@@ -564,7 +564,7 @@ describe("PWA v2.4: 起床時刻(計測のみ)", () => {
     d.entries["2026-08-08"] = { bedtime: 0, wake: 3 };
     const [head, row] = f.buildCSV(d).split("\n");
     expect(head).toContain("起床時刻");
-    expect(row).toBe("2026-08-08,〜23:00,〜7:30,,,,,,,,");
+    expect(row).toBe("2026-08-08,〜23:00,〜7:30,,,,,,,,,");
     const t = f.buildReviewText(d, "2026-08-08");
     expect(t).toContain("wake=[〜6:00,〜6:30,〜7:00,〜7:30,以降]");
     expect(t).toContain("計測のみ");
@@ -608,6 +608,59 @@ describe("PWA v2.4: 起床時刻(計測のみ)", () => {
     const view = q(dom, "#view").textContent;
     expect(view).toContain("起床が〜6:30以内 × 眠れた感「良」");
     expect(view).toContain("φ=1.00");
+  });
+});
+
+describe("PWA v2.4: 朝コーヒー", () => {
+  // カスタム項目は「昨日」カードに入る仕様なので、当朝の行動である朝コーヒーは CORE 側に置く
+  it("記録タブの「今朝」カードにあり、✓ したで保存される", () => {
+    const dom = boot();
+    const f = dom.window.__flourish;
+    const card = qa(dom, ".card").find((el) => el.textContent.includes("今朝"));
+    expect(card.textContent).toContain("朝コーヒー");
+    q(dom, '[data-f="coffee"][data-v="t"]').click();
+    expect(JSON.parse(dom.window.localStorage.getItem(KEY)).entries[f.fmt(new Date())].coffee).toBe(true);
+  });
+
+  it("週の目標と週タブの達成率に入る", () => {
+    const f0 = boot().window.__flourish;
+    const d = f0.defaultData();
+    expect(d.targets.coffee).toBe(6);
+    d.entries[f0.fmt(new Date())] = { coffee: true };
+    const dom = boot(JSON.stringify(d));
+    byText(dom, "button.tb", "週").click();
+    const wrow = qa(dom, ".wrow").find((el) => el.textContent.includes("朝コーヒー"));
+    expect(wrow.textContent).toContain("1/6");
+    expect(wrow.querySelectorAll(".dot.ok").length).toBe(1);
+    byText(dom, "button.tb", "設定").click();
+    expect(qa(dom, "[data-tgt]").some((el) => el.dataset.tgt === "coffee")).toBe(true);
+  });
+
+  it("CSVに朝コーヒーの列が入る", () => {
+    const f = boot().window.__flourish;
+    const d = f.defaultData();
+    d.entries["2026-08-08"] = { coffee: false };
+    const [head, row] = f.buildCSV(d).split("\n");
+    expect(head).toContain("朝コーヒー");
+    expect(head.split(",").indexOf("朝コーヒー")).toBe(head.split(",").indexOf("クレアチン") - 1);
+    expect(row).toBe("2026-08-08,,,,,,0,,,,,");
+  });
+
+  it("coffee を持たない旧データも既定値で埋まる", () => {
+    const f = boot().window.__flourish;
+    const m = f.migrate({ version: 3, targets: { gym: 4 }, entries: { "2026-08-01": { gym: true } } });
+    expect(m.targets.coffee).toBe(6);
+    expect(m.targets.gym).toBe(4); // 既存の設定は上書きしない
+    expect(m.enabled.coffee).toBe(true);
+  });
+
+  it("表示トグルを切ると記録タブから消える", () => {
+    const dom = boot();
+    expect(q(dom, '[data-f="coffee"]')).not.toBe(null);
+    byText(dom, "button.tb", "設定").click();
+    q(dom, '[data-tog="coffee"]').click();
+    byText(dom, "button.tb", "記録").click();
+    expect(q(dom, '[data-f="coffee"]')).toBe(null);
   });
 });
 

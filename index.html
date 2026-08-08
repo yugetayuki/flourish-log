@@ -146,6 +146,7 @@ var CORE = [
   {id:"bedtime", label:"就寝時刻"},
   {id:"youtube", label:"YouTube"},
   {id:"ashwagandha", label:"アシュワガンダ"},
+  {id:"coffee", label:"朝コーヒー"},
   {id:"creatine", label:"クレアチン"},
   {id:"weight", label:"体重測定"},
   {id:"gym", label:"ジム"},
@@ -165,9 +166,9 @@ function md(s){ return (+s.slice(5,7))+"/"+(+s.slice(8,10)); }
 function defaultData(){
   return {
     version: 4,
-    targets: {bedtime:5, youtube:5, ashwagandha:6, creatine:6, weight:5, gym:3, study:5},
+    targets: {bedtime:5, youtube:5, ashwagandha:6, coffee:6, creatine:6, weight:5, gym:3, study:5},
     th: {bedtime:2, youtube:1},
-    enabled: {bedtime:true, wake:true, sleepFeel:true, youtube:true, ashwagandha:true, creatine:true, weight:true, gym:true, study:true},
+    enabled: {bedtime:true, wake:true, sleepFeel:true, youtube:true, ashwagandha:true, coffee:true, creatine:true, weight:true, gym:true, study:true},
     custom: [],
     entries: {},
     lastBackup: null,
@@ -190,7 +191,8 @@ function normCustom(list){
 function migrate(d){
   var b = defaultData();
   var o = Object.assign({}, b, isPlainObject(d) ? d : {});
-  // v3 で lastBackup、v4 で起床時刻(wake)を追加。どちらも欠損は既定値で埋まるので値の変換は要らない
+  // v3 で lastBackup、v4 で起床時刻(wake)と朝コーヒー(coffee)を追加。
+  // いずれも欠損は既定値で埋まるので値の変換は要らない
   o.version = 4;
   o.lastBackup = (d && typeof d.lastBackup === "string") ? d.lastBackup : null;
   o.targets = Object.assign({}, b.targets, isPlainObject(d && d.targets) ? d.targets : {});
@@ -251,7 +253,7 @@ function csvCell(v){
   return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g,'""') + '"' : s;
 }
 function buildCSV(data){
-  var cols=["date","就寝時刻","起床時刻","眠れた感","YouTube","アシュワガンダ","クレアチン","体重測定","体重","ジム","勉強"]
+  var cols=["date","就寝時刻","起床時刻","眠れた感","YouTube","アシュワガンダ","朝コーヒー","クレアチン","体重測定","体重","ジム","勉強"]
     .concat(data.custom.map(function(c){return c.label;}));
   function b(v){ return v==null ? "" : v===true ? 1 : v===false ? 0 : v; }
   var lines=[cols.map(csvCell).join(",")];
@@ -262,7 +264,7 @@ function buildCSV(data){
       e.wake!=null?WAKE_OPTS[e.wake]:"",
       e.sleepFeel!=null?SLEEP_OPTS[e.sleepFeel]:"",
       e.youtube!=null?YT_OPTS[e.youtube]:"",
-      b(e.ashwagandha), b(e.creatine), b(e.weight), e.weightVal!=null?e.weightVal:"", b(e.gym), b(e.study)]
+      b(e.ashwagandha), b(e.coffee), b(e.creatine), b(e.weight), e.weightVal!=null?e.weightVal:"", b(e.gym), b(e.study)]
       .concat(data.custom.map(function(c){return b(e[c.id]);}));
     lines.push(row.map(csvCell).join(","));
   });
@@ -424,6 +426,7 @@ function viewLog(today){
   if (en.sleepFeel) fields.push(e.sleepFeel!=null);
   if (en.youtube) fields.push(e.youtube!=null);
   if (en.ashwagandha) fields.push(e.ashwagandha!=null);
+  if (en.coffee) fields.push(e.coffee!=null);
   if (en.creatine) fields.push(e.creatine!=null);
   if (en.weight) fields.push(e.weight!=null);
   if (en.gym) fields.push(e.gym!=null);
@@ -453,6 +456,7 @@ function viewLog(today){
     seg("wake", WAKE_OPTS, e.wake!=null?e.wake:null, ["on-indigo","on-indigo","on-indigo","on-indigo","on-indigo"]));
   if (en.sleepFeel) morn += row("眠れた感","主観でOK",
     seg("sleepFeel", SLEEP_OPTS, e.sleepFeel!=null?e.sleepFeel:null, ["on-pine","on-gray","on-sienna"]));
+  if (en.coffee) morn += row("朝コーヒー","", pairBtn("coffee", e.coffee!=null?e.coffee:null));
   if (en.creatine) morn += row("クレアチン","コーヒーの横に", pairBtn("creatine", e.creatine!=null?e.creatine:null));
   if (en.weight) {
     var winner = pairBtn("weight", e.weight!=null?e.weight:null);
@@ -689,7 +693,7 @@ function viewSettings(){
   h += '</select></div></div>';
 
   h += '<div class="card"><div class="chead"><span class="ctitle">表示する項目</span></div>';
-  var togs=[["bedtime","就寝時刻"],["wake","起床時刻"],["sleepFeel","眠れた感"],["youtube","YouTube"],["ashwagandha","アシュワガンダ"],["creatine","クレアチン"],["weight","体重測定"],["gym","ジム"],["study","勉強"]];
+  var togs=[["bedtime","就寝時刻"],["wake","起床時刻"],["sleepFeel","眠れた感"],["youtube","YouTube"],["ashwagandha","アシュワガンダ"],["coffee","朝コーヒー"],["creatine","クレアチン"],["weight","体重測定"],["gym","ジム"],["study","勉強"]];
   togs.forEach(function(t){
     var on = S.enabled[t[0]] !== false;
     h += '<div class="srow"><span style="font-size:14px">'+t[1]+'</span>'

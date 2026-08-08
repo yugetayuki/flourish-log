@@ -4,7 +4,7 @@
 Claude.ai チャット上で要件定義〜v2.0まで開発された。本書は Claude Code への引き継ぎ資料。
 
 - 最終更新: 2026-08-08 / 現行バージョン: **v2.4**(`index.html` 内 eyebrow 表記と一致させること)
-- テスト: `npm install && npm test`(vitest 58本 + 実ブラウザ smoke 16項目、全パス)
+- テスト: `npm install && npm test`(vitest 63本 + 実ブラウザ smoke 16項目、全パス)
 
 ### 名前について(v2.3で改称)
 
@@ -82,7 +82,8 @@ Claude.ai チャット上で要件定義〜v2.0まで開発された。本書は
 
 - `th` = 達成ライン。**このインデックス以下で達成**(bedtime: 0..3 / youtube: 0..2)。
 - **entriesの意味論(重要)**: キーの日付=「記録した朝」。フィールドが指す時点は
-  前夜(bedtime, ashwagandha)/ 当朝(wake, sleepFeel, creatine, weight, weightVal)/ 前日(youtube, gym, study, カスタム)。
+  前夜(bedtime, ashwagandha)/ 当朝(wake, sleepFeel, coffee, creatine, weight, weightVal)/ 前日(youtube, gym, study, カスタム)。
+  **カスタム項目は必ず前日を指す**(「昨日」カードに描画される)。当朝・前夜の行動を足すときは `CORE` 側に置くこと。
 - 値の欠損はキー自体を削除して表現(`null` を書き込まない)。全フィールド空になったらその日付キーごと削除。
 
 ### 不変条件・約束事
@@ -150,7 +151,7 @@ Claude.ai チャット上で要件定義〜v2.0まで開発された。本書は
 
 ```bash
 npm install
-npm test        # vitest 58本。ロジックとDOM操作
+npm test        # vitest 63本。ロジックとDOM操作
 npm run smoke   # 実ブラウザ(Chromium) 16項目。描画・保存・CSPの実効性
 ```
 
@@ -249,7 +250,7 @@ v2.0に至るまでに以下を検証して破棄した。同じ穴を掘り直�
 
 ```bash
 npm install
-npm test        # 58 passed
+npm test        # 63 passed
 npm run smoke   # 16/16 passed
 ```
 
