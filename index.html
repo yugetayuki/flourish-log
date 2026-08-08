@@ -2,11 +2,13 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<!-- 単一ファイル・外部通信ゼロという実態をブラウザ側にも宣言する。
+<!-- 外部通信ゼロという実態をブラウザ側にも宣言する。
      connect-src 'none' により、万一HTMLを注入されても記録を外部へ持ち出せない。
      インラインの script/style は本アプリの本体なので 'unsafe-inline' は外せない。
+     worker-src 'self' は Service Worker の登録に要る。既定では default-src 'none' まで
+     フォールバックして登録が弾かれる。同一オリジンのファイルしか読めないので範囲は広がらない。
      frame-ancestors は meta 経由では無視される仕様のため、ここには書いていない。 -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; connect-src 'none'; worker-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="robots" content="noindex, nofollow">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Aubade</title>
@@ -141,6 +143,7 @@ var WAKE_VAL     = [6, 6.5, 7, 7.5, 8.2];
 var WAKE_OPACITY = [.4, .55, .7, .85, 1];
 var SLEEP_OPTS   = ["良","普通","悪"];
 var YT_OPTS      = ["<30分","〜1h","〜2h","2h超"];
+var TREND_OPTS   = [28, 90];
 var WDAY = ["月","火","水","木","金","土","日"];
 var CORE = [
   {id:"bedtime", label:"就寝時刻"},
@@ -323,6 +326,8 @@ var S = load();
 var tab = "log";
 var sel = fmt(new Date());
 var lastToday = sel; // 前回の描画時点で「今日」だった日付。復帰時の日付またぎ検出に使う
+// 推移タブの表示期間。保存しないので開き直すと既定に戻る(朝の一瞥が主用途で、90日は掘るときだけ)
+var trendDays = TREND_OPTS[0];
 var expText = null, expNote = "", revText = null, revNote = "";
 var setNote = "", setNoteOk = false, armed = false, armTimer = null;
 var saveTimer = null;
@@ -543,6 +548,8 @@ function viewWeek(today){
 }
 
 /* ================= 推移(SVGチャート) ================= */
+// 90日表示では7日ごとのラベルが詰まって読めなくなるので、点数に応じて間引く
+function xLabelStep(n){ return Math.max(1, Math.round(n/4)); }
 function svgChart(rows, key, yMin, yMax, yTicks, refY, color){
   var W=320, H=150, L=44, R=8, T=8, B=20;
   var iw = W-L-R, ih = H-T-B;
@@ -554,8 +561,9 @@ function svgChart(rows, key, yMin, yMax, yTicks, refY, color){
     h += '<text x="'+(L-6)+'" y="'+(Y(t.v)+3)+'" font-size="9" fill="#71806F" text-anchor="end">'+t.l+'</text>';
   });
   if (refY != null) h += '<line x1="'+L+'" y1="'+Y(refY)+'" x2="'+(W-R)+'" y2="'+Y(refY)+'" stroke="#3E6B4F" stroke-width="1.5" stroke-dasharray="4 4"/>';
+  var step = xLabelStep(rows.length);
   rows.forEach(function(r,i){
-    if (i % 7 === 0 || i === rows.length-1) {
+    if (i % step === 0 || i === rows.length-1) {
       h += '<text x="'+X(i)+'" y="'+(H-6)+'" font-size="9" fill="#71806F" text-anchor="middle">'+r.d+'</text>';
     }
   });
@@ -567,16 +575,71 @@ function svgChart(rows, key, yMin, yMax, yTicks, refY, color){
     pen = true;
   });
   if (path) h += '<path d="'+path+'" fill="none" stroke="'+color+'" stroke-width="2"/>';
+  // 90日ぶんの点は互いに3pxしか離れず塊になるので、短い期間のときだけ打つ
+  if (rows.length <= 31) {
+    rows.forEach(function(r,i){
+      var v = r[key];
+      if (v == null) return;
+      h += '<circle cx="'+X(i).toFixed(1)+'" cy="'+Y(v).toFixed(1)+'" r="2.5" fill="'+color+'"/>';
+    });
+  }
+  return h + '</svg>';
+}
+// 就寝と起床を同じ時刻軸に載せ、その間隔で睡眠の長さを示す。長さを「◯時間」と数値では出さない。
+// 両端は選択肢の遅い側の端であって実測ではないので、断定するとバケット幅の誤差が見えなくなる
+function svgSleep(rows){
+  var yMin=22.8, yMax=32.4;
+  var yTicks=[{v:23,l:"23:00"},{v:25,l:"1:00"},{v:27,l:"3:00"},{v:29,l:"5:00"},{v:31,l:"7:00"}];
+  var W=320, H=150, L=44, R=8, T=8, B=20;
+  var iw = W-L-R, ih = H-T-B;
+  function X(i){ return L + (rows.length<=1 ? 0 : i/(rows.length-1)*iw); }
+  function Y(v){ return T + (1-(v-yMin)/(yMax-yMin))*ih; }
+  var h = '<svg viewBox="0 0 '+W+' '+H+'" width="100%">';
+  yTicks.forEach(function(t){
+    h += '<line x1="'+L+'" y1="'+Y(t.v)+'" x2="'+(W-R)+'" y2="'+Y(t.v)+'" stroke="#E3E7DE" stroke-width="1"/>';
+    h += '<text x="'+(L-6)+'" y="'+(Y(t.v)+3)+'" font-size="9" fill="#71806F" text-anchor="end">'+t.l+'</text>';
+  });
+  var step = xLabelStep(rows.length);
   rows.forEach(function(r,i){
-    var v = r[key];
-    if (v == null) return;
-    h += '<circle cx="'+X(i).toFixed(1)+'" cy="'+Y(v).toFixed(1)+'" r="2.5" fill="'+color+'"/>';
+    if (i % step === 0 || i === rows.length-1) {
+      h += '<text x="'+X(i)+'" y="'+(H-6)+'" font-size="9" fill="#71806F" text-anchor="middle">'+r.d+'</text>';
+    }
+  });
+  // 両方そろった連続区間ごとに塗る。欠損をまたいで塗ると、記録のない夜まで眠っていたことになる
+  var run=[];
+  function flush(){
+    if (run.length === 1) {
+      h += '<line x1="'+X(run[0].i).toFixed(1)+'" y1="'+Y(run[0].b).toFixed(1)
+        + '" x2="'+X(run[0].i).toFixed(1)+'" y2="'+Y(run[0].w).toFixed(1)
+        + '" stroke="#43507A" stroke-opacity=".28" stroke-width="2"/>';
+    } else if (run.length > 1) {
+      var d='';
+      run.forEach(function(p,k){ d += (k ? ' L ' : 'M ') + X(p.i).toFixed(1) + ' ' + Y(p.b).toFixed(1); });
+      for (var k=run.length-1; k>=0; k--) d += ' L ' + X(run[k].i).toFixed(1) + ' ' + Y(run[k].w).toFixed(1);
+      h += '<path d="'+d+' Z" fill="#43507A" fill-opacity=".14"/>';
+    }
+    run=[];
+  }
+  rows.forEach(function(r,i){
+    if (r.bed!=null && r.wakeAbs!=null) run.push({i:i, b:r.bed, w:r.wakeAbs});
+    else flush();
+  });
+  flush();
+  ["bed","wakeAbs"].forEach(function(key){
+    var path='', pen=false;
+    rows.forEach(function(r,i){
+      var v = r[key];
+      if (v == null) { pen=false; return; }
+      path += (pen ? ' L ' : ' M ') + X(i).toFixed(1) + ' ' + Y(v).toFixed(1);
+      pen = true;
+    });
+    if (path) h += '<path d="'+path+'" fill="none" stroke="#43507A" stroke-width="2"/>';
   });
   return h + '</svg>';
 }
 function viewTrend(today){
   var rows=[];
-  for (var i=27;i>=0;i--){
+  for (var i=trendDays-1;i>=0;i--){
     var dt = fmt(addDays(parseD(today), -i));
     var e = S.entries[dt] || {};
     // weightVal は自由入力かつ migrate() の正規化対象外(entries は素通し)なので、
@@ -585,24 +648,45 @@ function viewTrend(today){
     rows.push({d: md(dt),
       bed: e.bedtime!=null ? BEDTIME_VAL[e.bedtime] : null,
       wake: e.wake!=null ? WAKE_VAL[e.wake] : null,
+      // 帯グラフでは就寝と同じ時刻軸に載せるので、翌朝であることを +24 で表す
+      wakeAbs: e.wake!=null ? WAKE_VAL[e.wake]+24 : null,
       yt: e.youtube!=null ? e.youtube : null,
       w: (e.weightVal!=null && e.weightVal!=="" && isFinite(wn)) ? wn : null});
   }
+  var lab = "(" + trendDays + "日)";
+  var h = '<div class="seg" style="grid-template-columns:1fr 1fr;margin-bottom:12px">';
+  TREND_OPTS.forEach(function(d){
+    var on = trendDays === d;
+    h += '<button class="sb'+(on?' on on-gray':'')+'" data-td="'+d+'" aria-pressed="'+on+'">'+d+'日</button>';
+  });
+  h += '</div>';
+
   var bedT=[{v:23,l:"23:00"},{v:23.5,l:"23:30"},{v:24,l:"24:00"},{v:24.5,l:"24:30"},{v:25.2,l:"以降"}];
   var ytT=YT_OPTS.map(function(o,i){return {v:i,l:o};});
-  var h = '<div class="card"><div class="chead"><span class="ctitle">就寝時刻(28日)</span></div><div class="chartbox">'
+  h += '<div class="card"><div class="chead"><span class="ctitle">就寝時刻'+lab+'</span></div><div class="chartbox">'
     + svgChart(rows,"bed",22.8,25.4,bedT,BEDTIME_VAL[S.th.bedtime],"#43507A") + '</div></div>';
   var wakeT=[{v:6,l:"6:00"},{v:6.5,l:"6:30"},{v:7,l:"7:00"},{v:7.5,l:"7:30"},{v:8.2,l:"以降"}];
   // 達成ラインを持たない項目なので基準線(refY)は引かない
-  h += '<div class="card"><div class="chead"><span class="ctitle">起床時刻(28日)</span></div><div class="chartbox">'
+  h += '<div class="card"><div class="chead"><span class="ctitle">起床時刻'+lab+'</span></div><div class="chartbox">'
     + svgChart(rows,"wake",5.8,8.4,wakeT,null,"#43507A") + '</div></div>';
-  h += '<div class="card"><div class="chead"><span class="ctitle">YouTube(28日)</span></div><div class="chartbox">'
+
+  // 体重チャートと同じく、描くものがある日が出てから表示する
+  if (rows.some(function(r){ return r.bed!=null && r.wakeAbs!=null; })) {
+    h += '<div class="card"><div class="chead"><span class="ctitle">睡眠'+lab+'</span></div><div class="chartbox">'
+      + svgSleep(rows) + '</div>'
+      + '<p class="foot">上の線が起床、下の線が就寝で、帯の広さがおおよその睡眠の長さです。'
+      + '各点は選んだ選択肢の遅い側の端(「〜23:30」なら23:30)なので、実際の時刻は最大30分早い側にあります。</p></div>';
+  } else {
+    h += '<p class="foot">就寝と起床の両方を記録した日ができると、ここに睡眠の帯が表示されます。</p>';
+  }
+
+  h += '<div class="card"><div class="chead"><span class="ctitle">YouTube'+lab+'</span></div><div class="chartbox">'
     + svgChart(rows,"yt",-0.2,3.2,ytT,S.th.youtube,"#A9663B") + '</div></div>';
   var ws = rows.filter(function(r){return r.w!=null;}).map(function(r){return r.w;});
   if (ws.length) {
     var mn=Math.min.apply(null,ws)-0.5, mx=Math.max.apply(null,ws)+0.5;
     var wt=[{v:mn+0.5,l:(mn+0.5).toFixed(1)},{v:(mn+mx)/2,l:((mn+mx)/2).toFixed(1)},{v:mx-0.5,l:(mx-0.5).toFixed(1)}];
-    h += '<div class="card"><div class="chead"><span class="ctitle">体重(28日)</span></div><div class="chartbox">'
+    h += '<div class="card"><div class="chead"><span class="ctitle">体重'+lab+'</span></div><div class="chartbox">'
       + svgChart(rows,"w",mn,mx,wt,null,"#3E6B4F") + '</div></div>';
   } else {
     h += '<p class="foot">体重の数値を入力すると、ここに推移が表示されます。</p>';
@@ -643,6 +727,8 @@ function viewReview(today){
       {l:"就寝が達成ライン内 × 眠れた感「良」", ps:mk(function(e){return e.bedtime==null?null:e.bedtime<=S.th.bedtime;}, function(e){return e.sleepFeel==null?null:e.sleepFeel===0;})},
       {l:"起床が〜6:30以内 × 眠れた感「良」", ps:mk(function(e){return e.wake==null?null:e.wake<=1;}, function(e){return e.sleepFeel==null?null:e.sleepFeel===0;})},
       {l:"YouTube多め(〜2h以上) × 就寝が遅い", ps:mk(function(e){return e.youtube==null?null:e.youtube>=2;}, function(e){return e.bedtime==null?null:e.bedtime>S.th.bedtime;})},
+      {l:"アシュワガンダを飲んだ × 眠れた感「良」", ps:mk(function(e){return e.ashwagandha==null?null:e.ashwagandha===true;}, function(e){return e.sleepFeel==null?null:e.sleepFeel===0;})},
+      {l:"就寝が達成ライン内 × 起床が〜6:30以内", ps:mk(function(e){return e.bedtime==null?null:e.bedtime<=S.th.bedtime;}, function(e){return e.wake==null?null:e.wake<=1;})},
       {l:"ジムをした × 眠れた感「良」", ps:mk(function(e){return e.gym==null?null:e.gym===true;}, function(e){return e.sleepFeel==null?null:e.sleepFeel===0;})},
       {l:"勉強した × YouTube多め", ps:mk(function(e){return e.study==null?null:e.study===true;}, function(e){return e.youtube==null?null:e.youtube>=2;})},
     ];
@@ -813,6 +899,9 @@ document.addEventListener("click", function(ev){
     save(); render(); return;
   }
 
+  var td = t.closest("[data-td]");
+  if (td) { trendDays = +td.dataset.td; render(); return; }
+
   var tg = t.closest("[data-tgt]");
   if (tg) {
     var id = tg.dataset.tgt, d = +tg.dataset.d;
@@ -920,6 +1009,14 @@ window.__flourish = {
 };
 
 render();
+
+// オフラインでも起動できるようにする。CSP に worker-src 'self' が無いと登録が弾かれる。
+// 登録できなくてもアプリ自体は動く(オンライン時の挙動は Service Worker の有無で変わらない)
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("sw.js").catch(function(e){
+    console.error("[flourish] Service Worker を登録できませんでした", e);
+  });
+}
 </script>
 </body>
 </html>

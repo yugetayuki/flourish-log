@@ -8,7 +8,8 @@ import { chromium } from "@playwright/test";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const PORT = 8899;
-const TYPES = { ".html": "text/html; charset=utf-8", ".txt": "text/plain; charset=utf-8" };
+// Service Worker のスクリプトは JavaScript の MIME タイプで返さないとブラウザに拒否される
+const TYPES = { ".html": "text/html; charset=utf-8", ".txt": "text/plain; charset=utf-8", ".js": "text/javascript; charset=utf-8" };
 
 const results = [];
 const check = (name, ok, detail) => {
@@ -58,6 +59,7 @@ check("1タップで localStorage に保存される", !!saved && saved.includes
 check("「✓ 保存済み」が出る", (await page.textContent("#saveState")) === "✓ 保存済み");
 
 await page.getByRole("button", { name: "〜6:30", exact: true }).click();
+await page.getByRole("button", { name: "〜23:30", exact: true }).click();
 const wake = await page.evaluate(() => JSON.parse(localStorage.getItem("flourish-log-v2")));
 const wakeDay = wake.entries[Object.keys(wake.entries)[0]];
 check("起床時刻が1タップで保存される", wakeDay.wake === 1, JSON.stringify(wakeDay));
@@ -68,8 +70,15 @@ for (const tab of ["週", "推移", "週報", "設定"]) {
   check(`タブ「${tab}」が描画される`, len > 50, `${len}文字`);
 }
 await page.getByRole("button", { name: "推移", exact: true }).click();
-check("推移タブにSVGが3枚以上ある", (await page.locator("svg").count()) >= 3);
+check("推移タブにSVGが4枚以上ある", (await page.locator("svg").count()) >= 4);
 check("推移タブに起床時刻チャートがある", (await page.textContent("#view")).includes("起床時刻(28日)"));
+// 就寝と起床が1日ぶん揃ったので、睡眠の帯が塗られているはず
+const band = await page.locator('path[fill-opacity], line[stroke-opacity]').count();
+check("睡眠チャートに帯が描かれる", (await page.textContent("#view")).includes("睡眠(28日)") && band > 0, `帯の要素 ${band} 個`);
+
+await page.getByRole("button", { name: "90日", exact: true }).click();
+check("期間を90日に切り替えられる", (await page.textContent("#view")).includes("就寝時刻(90日)"));
+await page.getByRole("button", { name: "28日", exact: true }).click();
 
 const icon = await page.evaluate(async () => {
   const im = new Image();
@@ -101,10 +110,31 @@ check("持ち出しが CSP で遮断される", violations.length >= 5, `違反 
 check("外部サーバーに1件も届かない", received.length === 0, received.join(" / ") || "0件");
 check("ページ遷移が起きていない", page.url() === base, page.url());
 
-// Service Worker 未導入なので、オフラインでは開けないはず。合否ではなく現状の記録として出す
+// Service Worker はここでしか検証できない。JSDOM は実装を持たず、CSP の worker-src も解釈しない
+const swState = await page.evaluate(async () => {
+  if (!("serviceWorker" in navigator)) return "APIなし";
+  // 登録が CSP で弾かれると ready は永久に解決しないので、待ち時間を切る
+  const reg = await Promise.race([
+    navigator.serviceWorker.ready,
+    new Promise((r) => setTimeout(() => r(null), 5000)),
+  ]);
+  return reg && reg.active ? "active" : "登録されない";
+});
+check("Service Worker が登録され有効になる", swState === "active", swState);
+
+await page.reload();
+check("再読み込みで Service Worker の管理下に入る", await page.evaluate(() => !!navigator.serviceWorker.controller));
+
 await context.setOffline(true);
-let offline = "開けない(Service Worker 未導入のため想定どおり)";
-try { await page.reload({ timeout: 5000 }); offline = "開けた"; } catch { /* 想定どおり */ }
+let offline = "";
+try {
+  await page.reload({ timeout: 8000 });
+  offline = (await page.textContent("h1")) === "Aubade" ? "開けた" : "開いたが描画されない";
+} catch (e) { offline = "開けない: " + e.message; }
+check("オフラインでも起動する", offline === "開けた", offline);
+// 記録が消えていないこと。キャッシュから起動しても localStorage は同じ容器を見る
+const kept = await page.evaluate(() => localStorage.getItem("flourish-log-v2"));
+check("オフライン起動でも記録が残る", !!kept && JSON.parse(kept).entries && Object.keys(JSON.parse(kept).entries).length > 0);
 await context.setOffline(false);
 
 await browser.close();
@@ -115,8 +145,6 @@ const pad = Math.max(...results.map((r) => r.name.length));
 for (const r of results) {
   console.log(`${r.ok ? "PASS" : "FAIL"}  ${r.name.padEnd(pad)}${r.detail ? "  — " + r.detail : ""}`);
 }
-console.log(`INFO  オフライン時の起動: ${offline}`);
-
 const failed = results.filter((r) => !r.ok);
 console.log(`\n${results.length - failed.length}/${results.length} passed`);
 if (failed.length) process.exit(1);

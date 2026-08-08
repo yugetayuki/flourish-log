@@ -317,9 +317,54 @@ describe("PWA v2.4: 配信ポリシー", () => {
     expect(readFileSync("robots.txt", "utf8")).toContain("Disallow: /");
   });
 
-  it("外部への通信コードとリソース参照を持たない", () => {
+  // sw.js は仕事上 fetch を使うので対象外。そちらの制約は「Service Worker」の describe で見る
+  it("index.html が外部への通信コードとリソース参照を持たない", () => {
     expect(html).not.toMatch(/fetch\(|XMLHttpRequest|WebSocket|sendBeacon/);
     expect(html).not.toMatch(/(src|href)\s*=\s*["']https?:/);
+  });
+});
+
+describe("PWA v2.4: Service Worker", () => {
+  const sw = readFileSync("sw.js", "utf8");
+
+  it("CSPが worker-src 'self' を許可する", () => {
+    const c = q(boot(), 'meta[http-equiv="Content-Security-Policy"]').getAttribute("content");
+    expect(c).toContain("worker-src 'self'"); // 無いと default-src 'none' まで落ちて登録が弾かれる
+    expect(c).toContain("connect-src 'none'"); // 緩めたのは worker-src だけ
+  });
+
+  it("index.htmlが機能検出つきで登録し、失敗を握りつぶさない", () => {
+    expect(html).toContain('"serviceWorker" in navigator');
+    expect(html).toMatch(/navigator\.serviceWorker\.register\("sw\.js"\)\s*\.catch/);
+    expect(html).toContain("[flourish] Service Worker を登録できませんでした");
+  });
+
+  it("Service Workerが無い環境でも起動して保存できる", () => {
+    const dom = boot();
+    expect(dom.window.navigator.serviceWorker).toBe(undefined); // JSDOM は実装を持たない
+    byText(dom, "button.sb", "✓ した").click();
+    expect(dom.window.localStorage.getItem(KEY)).not.toBe(null);
+  });
+
+  // 「古いHTMLを掴み続ける」事故を避けるための約束。破ると Service Worker を入れた意味が反転する
+  it("キャッシュ名にバージョンを持ち、古いキャッシュを消す", () => {
+    expect(sw).toMatch(/var CACHE = "aubade-v\d+\.\d+"/);
+    expect(sw).toContain("skipWaiting");
+    expect(sw).toContain("clients.claim");
+    expect(sw).toContain("caches.delete");
+  });
+
+  it("ネットワーク優先で、失敗したときだけキャッシュへ倒す", () => {
+    const fetchAt = sw.indexOf("fetch(req)");
+    const cacheAt = sw.indexOf("caches.match(req)");
+    expect(fetchAt).toBeGreaterThan(-1);
+    expect(cacheAt).toBeGreaterThan(fetchAt); // キャッシュ参照は catch の中にしかない
+  });
+
+  // Service Worker はページのCSPの外側で動くので、持ち出し経路の迂回にならないことを見る
+  it("他オリジンには触らない", () => {
+    expect(sw).toContain("self.location.origin");
+    expect(sw).not.toMatch(/https?:\/\//);
   });
 });
 
@@ -611,6 +656,155 @@ describe("PWA v2.4: 起床時刻(計測のみ)", () => {
   });
 });
 
+describe("PWA v2.4: 相関ヒント", () => {
+  // 同じ entry の中で対にするので、時点がずれない組み合わせしか作れない
+  // (前夜のアシュワガンダ × 当朝の眠れた感 は成立、当朝のコーヒー × その夜の就寝 は成立しない)
+  const seed = (f) => {
+    const d = f.defaultData();
+    for (let i = 0; i < 28; i++) {
+      const dt = new Date("2026-07-01T00:00");
+      dt.setDate(dt.getDate() + i);
+      const good = i % 2 === 0;
+      d.entries[f.fmt(dt)] = {
+        ashwagandha: good, sleepFeel: good ? 0 : 2,
+        bedtime: good ? 0 : 4, wake: good ? 0 : 4,
+      };
+    }
+    return d;
+  };
+
+  it("前夜のアシュワガンダと当朝の眠れた感を対にする", () => {
+    const f0 = boot().window.__flourish;
+    const dom = boot(JSON.stringify(seed(f0)));
+    byText(dom, "button.tb", "週報").click();
+    expect(q(dom, "#view").textContent).toContain("アシュワガンダを飲んだ × 眠れた感「良」");
+  });
+
+  it("早寝が早起きにつながっているかを対にする", () => {
+    const f0 = boot().window.__flourish;
+    const dom = boot(JSON.stringify(seed(f0)));
+    byText(dom, "button.tb", "週報").click();
+    expect(q(dom, "#view").textContent).toContain("就寝が達成ライン内 × 起床が〜6:30以内");
+  });
+
+  // 本数を増やすほど偶然有意に見えるものが出る(多重比較)。両項目が揃った対だけを出す
+  it("データの無い組み合わせは出さない", () => {
+    const f0 = boot().window.__flourish;
+    const dom = boot(JSON.stringify(seed(f0)));
+    byText(dom, "button.tb", "週報").click();
+    const view = q(dom, "#view").textContent;
+    expect(view).not.toContain("ジムをした");
+    expect(view).not.toContain("勉強した");
+    expect(qa(dom, "#view .row").length).toBe(4); // 揃っているのは就寝・起床・眠れた感の4対だけ
+  });
+});
+
+describe("PWA v2.4: 推移タブの期間切替", () => {
+  const openTrend = (dom) => byText(dom, "button.tb", "推移").click();
+  const dayAgo = (f, n) => { const d = new Date(); d.setDate(d.getDate() - n); return f.fmt(d); };
+
+  it("既定は28日で、90日に切り替わる", () => {
+    const dom = boot();
+    openTrend(dom);
+    expect(q(dom, "#view").textContent).toContain("就寝時刻(28日)");
+    expect(byText(dom, "button.sb", "28日").getAttribute("aria-pressed")).toBe("true");
+    byText(dom, "button.sb", "90日").click();
+    expect(q(dom, "#view").textContent).toContain("就寝時刻(90日)");
+    expect(byText(dom, "button.sb", "90日").getAttribute("aria-pressed")).toBe("true");
+    expect(byText(dom, "button.sb", "28日").getAttribute("aria-pressed")).toBe("false");
+  });
+
+  it("90日にすると28日より前の記録が入る", () => {
+    const f0 = boot().window.__flourish;
+    const d = f0.defaultData();
+    d.entries[dayAgo(f0, 60)] = { weight: true, weightVal: "70.0" };
+    const dom = boot(JSON.stringify(d));
+    openTrend(dom);
+    expect(q(dom, "#view").textContent).toContain("体重の数値を入力すると"); // 28日の窓には無い
+    byText(dom, "button.sb", "90日").click();
+    expect(q(dom, "#view").textContent).toContain("体重(90日)");
+  });
+
+  // 90日ぶんの点は3px間隔で塊になるので打たない
+  it("90日表示では点を打たない", () => {
+    const f0 = boot().window.__flourish;
+    const d = f0.defaultData();
+    for (let i = 0; i < 40; i++) d.entries[dayAgo(f0, i)] = { bedtime: i % 5 };
+    const dom = boot(JSON.stringify(d));
+    openTrend(dom);
+    expect(qa(dom, "svg")[0].querySelectorAll("circle").length).toBeGreaterThan(0);
+    byText(dom, "button.sb", "90日").click();
+    expect(qa(dom, "svg")[0].querySelectorAll("circle").length).toBe(0);
+  });
+});
+
+describe("PWA v2.4: 睡眠の帯グラフ", () => {
+  const openTrend = (dom) => byText(dom, "button.tb", "推移").click();
+  const dayAgo = (f, n) => { const d = new Date(); d.setDate(d.getDate() - n); return f.fmt(d); };
+  const bands = (dom) => qa(dom, "#view path[fill-opacity]").length;
+
+  it("就寝と起床が揃った日ができるまでは案内文を出す", () => {
+    const f0 = boot().window.__flourish;
+    const d = f0.defaultData();
+    d.entries[dayAgo(f0, 0)] = { bedtime: 2 }; // 就寝だけでは睡眠の長さが決まらない
+    const dom = boot(JSON.stringify(d));
+    openTrend(dom);
+    expect(q(dom, "#view").textContent).not.toContain("睡眠(28日)");
+    expect(q(dom, "#view").textContent).toContain("就寝と起床の両方を記録した日ができると");
+    expect(bands(dom)).toBe(0);
+  });
+
+  it("両方揃うと帯が出て、就寝と起床の線が引かれる", () => {
+    const f0 = boot().window.__flourish;
+    const d = f0.defaultData();
+    d.entries[dayAgo(f0, 0)] = { bedtime: 2, wake: 2 };
+    d.entries[dayAgo(f0, 1)] = { bedtime: 1, wake: 1 };
+    const dom = boot(JSON.stringify(d));
+    openTrend(dom);
+    expect(q(dom, "#view").textContent).toContain("睡眠(28日)");
+    expect(bands(dom)).toBe(1);
+    // 帯の上下の線(就寝・起床)が2本
+    const svg = qa(dom, "svg").find((s) => s.querySelector("path[fill-opacity]"));
+    expect(svg.querySelectorAll('path[fill="none"]').length).toBe(2);
+  });
+
+  // 欠損をまたいで塗ると、記録のない夜まで眠っていたことになる
+  it("片方が欠けた日で帯を切る", () => {
+    const f0 = boot().window.__flourish;
+    const d = f0.defaultData();
+    [0, 1].forEach((n) => { d.entries[dayAgo(f0, n)] = { bedtime: 2, wake: 2 }; });
+    d.entries[dayAgo(f0, 2)] = { bedtime: 2 }; // 起床が無いので途切れる
+    [3, 4].forEach((n) => { d.entries[dayAgo(f0, n)] = { bedtime: 2, wake: 2 }; });
+    const dom = boot(JSON.stringify(d));
+    openTrend(dom);
+    expect(bands(dom)).toBe(2);
+  });
+
+  it("孤立した1日は線分で示す", () => {
+    const f0 = boot().window.__flourish;
+    const d = f0.defaultData();
+    d.entries[dayAgo(f0, 3)] = { bedtime: 2, wake: 2 };
+    const dom = boot(JSON.stringify(d));
+    openTrend(dom);
+    expect(bands(dom)).toBe(0); // 幅0の帯は塗っても見えない
+    expect(qa(dom, "#view line[stroke-opacity]").length).toBe(1);
+  });
+
+  // 帯の広さは推定であって実測ではない。断定表示するとバケット幅の誤差が見えなくなる
+  it("睡眠時間を「◯時間」と数値で断定しない", () => {
+    const f0 = boot().window.__flourish;
+    const d = f0.defaultData();
+    d.entries[dayAgo(f0, 0)] = { bedtime: 2, wake: 2 };
+    d.entries[dayAgo(f0, 1)] = { bedtime: 2, wake: 2 };
+    const dom = boot(JSON.stringify(d));
+    openTrend(dom);
+    const view = q(dom, "#view").textContent;
+    expect(view).not.toMatch(/\d+(\.\d+)?\s*時間/);
+    expect(view).toContain("おおよその睡眠の長さ");
+    expect(view).toContain("最大30分早い側");
+  });
+});
+
 describe("PWA v2.4: 体重の自由入力", () => {
   const enterWeight = (dom, text) => {
     q(dom, '[data-f="weight"][data-v="t"]').click();
@@ -651,9 +845,12 @@ describe("PWA v2.4: 体重の自由入力", () => {
     const d = f0.defaultData();
     d.entries[f0.fmt(new Date())] = { weight: true, weightVal: "6.8.5" };
     const dom = boot(JSON.stringify(d));
-    const text = weightSvgText(dom);
-    expect(text).not.toContain("NaN");
-    expect(qa(dom, "svg").pop().querySelectorAll("circle").length).toBe(0);
+    byText(dom, "button.tb", "推移").click();
+    const view = q(dom, "#view").textContent;
+    expect(view).not.toContain("NaN");
+    // 数値として読めない値は未入力と同じ扱いになり、チャートではなく案内文が出る
+    expect(view).not.toContain("体重(28日)");
+    expect(view).toContain("体重の数値を入力すると");
   });
 });
 

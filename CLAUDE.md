@@ -4,7 +4,7 @@
 Claude.ai チャット上で要件定義〜v2.0まで開発された。本書は Claude Code への引き継ぎ資料。
 
 - 最終更新: 2026-08-08 / 現行バージョン: **v2.4**(`index.html` 内 eyebrow 表記と一致させること)
-- テスト: `npm install && npm test`(vitest 67本 + 実ブラウザ smoke 16項目、全パス)
+- テスト: `npm install && npm test`(vitest 84本 + 実ブラウザ smoke 22項目、全パス)
 
 ### 名前について(v2.3で改称)
 
@@ -49,8 +49,10 @@ Claude.ai チャット上で要件定義〜v2.0まで開発された。本書は
 
 ## 2. 現状(v2.4)
 
-- **形態**: 依存ゼロの単一ファイルPWA(`index.html` のみ)。vanilla JS + インラインCSS + インラインSVGチャート。
-  フレームワーク・CDN・ビルド工程なし(オフライン耐性と検証容易性のための意図的選択)。
+- **形態**: 依存ゼロのPWA。出荷物は `index.html` と `sw.js` の2本だけ。
+  vanilla JS + インラインCSS + インラインSVGチャート。フレームワーク・CDN・ビルド工程なし
+  (オフライン耐性と検証容易性のための意図的選択)。`sw.js` は別ファイルでしか登録できない仕様上の分割で、
+  中身は index.html のキャッシュだけを見る(v2.4 までは単一ファイルだった)。
 - **保存**: `localStorage`、キー `flourish-log-v2`、即時書き込み。
 - **ホスティング**: GitHub Pages。リポジトリ https://github.com/yugetayuki/flourish-log (Public) /
   公開URL https://yugetayuki.github.io/flourish-log/ 。`main` に push すると数分で反映。
@@ -61,7 +63,7 @@ Claude.ai チャット上で要件定義〜v2.0まで開発された。本書は
   出力形式の契約: 【事実】3行以内 / 【解釈】2行以内(推測と明示) / 【来週の一点】1つだけ。
   責めない・説教しない・淡々と。環境設計(摩擦の調整)の観点で提案する。
 - **タブ**: 記録 / 週 / 推移 / 週報 / 設定 の5つ。中身は `TABS` と各 `viewXxx()` を読めば分かる。
-  遡及入力は過去7日まで。相関ヒントは28日ロック。
+  遡及入力は過去7日まで。相関ヒントは28日ロック。推移の表示期間は28日/90日で切替(`trendDays`、保存しない)。
 
 ---
 
@@ -129,8 +131,14 @@ Claude.ai チャット上で要件定義〜v2.0まで開発された。本書は
 - **時刻の選択肢(`BEDTIME_OPTS` / `WAKE_OPTS`)の刻みを後から変えない。** 保存されるのは
   インデックスなので、境界を動かすと過去の記録の意味が黙って変わる。変える場合は `migrate()` での
   読み替えとセットで設計すること。
+- **Service Worker はネットワーク優先を崩さない。** キャッシュ優先にすると「古いHTMLを掴み続けて
+  版が上がらない」事故が起きる。Service Worker を入れずにきた理由がそれなので、速度ではなく
+  更新の確実さを取る。得られるのはオフライン起動だけでよい。
+  キャッシュ名 `aubade-vX.Y` にはバージョンを含め、リリース時に上げる(`activate` の掃除がこれで効く)。
+  `sw.js` は**ページのCSPの外側**で動くため、他オリジンへは自分から触らない(`self.location.origin` で弾く)。
 - **外部通信をゼロに保つ(v2.2)。** CSP(`connect-src 'none'` ほか)を `<meta>` で宣言済み。
-  通信を1本でも足すと CSP に阻まれ、テスト(「外部への通信コードとリソース参照を持たない」)も落ちる。
+  緩めたのは Service Worker の登録に要る `worker-src 'self'` だけ(同一オリジンのファイルしか読めない)。
+  通信を1本でも足すと CSP に阻まれ、テスト(「index.html が外部への通信コードとリソース参照を持たない」)も落ちる。
   仕様変更なしに `fetch` 等を足さないこと。バックログP2のAPI直呼びを実装する場合は、
   CSP の `connect-src` 緩和とセットで設計し、緩和範囲を必要最小限のホストに限ること。
 
@@ -155,8 +163,8 @@ Claude.ai チャット上で要件定義〜v2.0まで開発された。本書は
 
 ```bash
 npm install
-npm test        # vitest 67本。ロジックとDOM操作
-npm run smoke   # 実ブラウザ(Chromium) 16項目。描画・保存・CSPの実効性
+npm test        # vitest 84本。ロジックとDOM操作
+npm run smoke   # 実ブラウザ(Chromium) 22項目。描画・保存・CSP・Service Workerの実効性
 ```
 
 - 方式: 出荷物である `index.html` そのものを `JSDOM(html, {runScripts:"dangerously"})` で起動し、
@@ -183,10 +191,11 @@ npm run smoke   # 実ブラウザ(Chromium) 16項目。描画・保存・CSPの�
 - **リリース手順は `/release` スキル**(`.claude/skills/release/SKILL.md`)にある。手順なので CLAUDE.md には置かない。
 - **iOSの容器に注意**: ホーム画面追加したPWAとSafariタブは localStorage の容器が別。
   オーナーの運用は「ホームのアイコンから開く」に固定されている。デバッグで挙動差を見たらまずこれを疑う。
-- 古いHTMLをホーム画面PWAが掴み続けることがある(キャッシュ)。バージョン表記が上がらない場合は
-  一度Safari側で開いて更新、それでもダメなら Service Worker 未導入なので単純なリロード問題。
-- **オフラインでは起動できない。** Service Worker がないため。Chromium で確認済み(`npm run smoke` の
-  INFO 行)。iOS Safari の挙動は未確認。圏外・機内モードで記録したい要件が出たら P2 の SW 導入を再検討する。
+- 古いHTMLをホーム画面PWAが掴み続けることがある(キャッシュ)。Service Worker はネットワーク優先なので
+  通信できていれば必ず新しい方が出る。バージョン表記が上がらない場合は一度Safari側で開いて更新する。
+- **オフラインでも起動できる(Service Worker 導入後)。** Chromium で確認済み
+  (`npm run smoke` の「オフラインでも起動する」)。**iOS Safari とホーム画面PWAでの挙動は未確認**で、
+  実機で機内モードにして開けるかはオーナーに見てもらう必要がある。
 - バックアップ: 設定タブ「JSONをコピー」(オーナーへは月1回程度を推奨済み)。復元は「取り込む」。
 - **このリポジトリは Public。** Pages を無料プランで公開するための選択。
   **リポジトリおよび本ドキュメントに個人情報を追記しないこと**(現状の内容はコードと設計判断のみ)。
@@ -200,9 +209,14 @@ npm run smoke   # 実ブラウザ(Chromium) 16項目。描画・保存・CSPの�
 - 記録の外部送信。CSP `connect-src 'none'` により fetch/XHR/sendBeacon/WebSocket を、
   `img-src data:` により画像ビーコンを、`form-action 'none'` によりフォーム送信を遮断。
   実ブラウザで「攻撃者サーバーへの到達 0件」を確認済み(v2.2)。
+  Service Worker 導入後も遮断は同じ。`worker-src 'self'` は同一オリジンのスクリプトしか許さず、
+  攻撃者がリポジトリに書き込めない限り新しい Service Worker を登録させる経路はない。
 - 取り込みJSON由来のHTML属性注入。`esc()` + `migrate()` の型正規化で塞いでいる。
 
 **守っていないこと(仕様として)**
+- **`sw.js` の中身。** Service Worker はページのCSPが適用されないので、ここに通信コードを書けば
+  持ち出せる。同一オリジンのファイルであり index.html と同じ信頼レベルなので、リポジトリへの
+  書き込みを防ぐこと(＝GitHubアカウントの保護)が唯一の防御。**`sw.js` に他オリジンへの通信を足さないこと。**
 - **サイトそのものの閲覧制限。** Pages はURLを知れば誰でも開ける。private リポジトリにしても
   サイトは公開されたままで、アクセス制御は GitHub Enterprise Cloud 限定。開いても中身は空なので許容している。
 - **端末を他人が操作した場合。** 端末のロックが唯一の防御。
@@ -211,6 +225,8 @@ npm run smoke   # 実ブラウザ(Chromium) 16項目。描画・保存・CSPの�
 **CSPを変更するときの確認手順**(JSDOMはCSPを解釈しないためテストでは検出できない)
 1. ローカルにHTTPで配信して実ブラウザで開き、5タブすべてが描画され1タップで保存できること
 2. `securitypolicyviolation` を購読した状態で外部への fetch/XHR/beacon/画像を試し、受信側に0件届くこと
+3. Service Worker が登録され有効になること(`worker-src` を締めると無言で登録が落ち、
+   オフライン起動だけが静かに壊れる)。`npm run smoke` がここまで見る
 
 ---
 
@@ -254,8 +270,8 @@ v2.0に至るまでに以下を検証して破棄した。同じ穴を掘り直�
 
 ```bash
 npm install
-npm test        # 67 passed
-npm run smoke   # 16/16 passed
+npm test        # 84 passed
+npm run smoke   # 22/22 passed
 ```
 
 1. `.claude/rules/10-guardrails.md` を読む(これが受け入れ基準)。
