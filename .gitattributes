@@ -1,0 +1,2 @@
+# GitHub Pages へそのまま配信するファイルなので、Windows 編集で CRLF に化けさせない
+* text=auto eol=lf

@@ -112,9 +112,10 @@ svg{display:block}
 <body>
 <div id="wrap">
   <header>
-    <div class="title"><h1>繁栄ログ</h1><span class="eyebrow mono">MORNING&nbsp;LOG&nbsp;·&nbsp;v2.0</span></div>
+    <div class="title"><h1>繁栄ログ</h1><span class="eyebrow mono">MORNING&nbsp;LOG&nbsp;·&nbsp;v2.1</span></div>
     <span id="saveState"></span>
   </header>
+  <div id="banner"></div>
   <div id="view"></div>
 </div>
 <nav><div class="navin" id="nav"></div></nav>
@@ -123,6 +124,7 @@ svg{display:block}
 "use strict";
 /* ================= 定数 ================= */
 var KEY = "flourish-log-v2";
+var BROKEN_PREFIX = KEY + "-broken-";
 var BEDTIME_OPTS = ["〜23:00","〜23:30","〜24:00","〜24:30","以降"];
 var BEDTIME_VAL  = [23, 23.5, 24, 24.5, 25.2];
 var SLEEP_OPTS   = ["良","普通","悪"];
@@ -213,11 +215,16 @@ function weekStats(data, ws, today){
   return {range: md(days[0])+"–"+md(days[6]), logged:logged, items:per,
     bedtime:dist("bedtime",5), sleepFeel:dist("sleepFeel",3), youtube:dist("youtube",4)};
 }
+// カスタム項目のラベルは自由入力なので、カンマ/引用符/改行で列がずれないよう RFC4180 で囲う
+function csvCell(v){
+  var s = v==null ? "" : String(v);
+  return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g,'""') + '"' : s;
+}
 function buildCSV(data){
   var cols=["date","就寝時刻","眠れた感","YouTube","アシュワガンダ","クレアチン","体重測定","体重","ジム","勉強"]
     .concat(data.custom.map(function(c){return c.label;}));
   function b(v){ return v==null ? "" : v===true ? 1 : v===false ? 0 : v; }
-  var lines=[cols.join(",")];
+  var lines=[cols.map(csvCell).join(",")];
   Object.keys(data.entries).sort().forEach(function(dt){
     var e=data.entries[dt];
     var row=[dt,
@@ -226,7 +233,7 @@ function buildCSV(data){
       e.youtube!=null?YT_OPTS[e.youtube]:"",
       b(e.ashwagandha), b(e.creatine), b(e.weight), e.weightVal!=null?e.weightVal:"", b(e.gym), b(e.study)]
       .concat(data.custom.map(function(c){return b(e[c.id]);}));
-    lines.push(row.join(","));
+    lines.push(row.map(csvCell).join(","));
   });
   return lines.join("\n");
 }
@@ -241,12 +248,42 @@ function buildReviewText(data, today){
 }
 
 /* ================= 状態 ================= */
+var loadError = null;   // 起動時の読み込み事故をユーザーに見せるための文言
+var saveBlocked = false; // 原本を退避できなかった場合、上書きによる不可逆消失を止める
 function load(){
+  var t;
+  try { t = localStorage.getItem(KEY); }
+  catch(e) {
+    console.error("[flourish] localStorage を読めませんでした", e);
+    loadError = "保存領域を読み書きできません。今日の入力は保存されない可能性があります。";
+    return defaultData();
+  }
+  if (!t) return defaultData();
+  try { return migrate(JSON.parse(t)); }
+  catch(e) {
+    console.error("[flourish] 保存データを解析できませんでした", e);
+    // 初期状態のまま save() すると原本を上書きして復旧不能になるため、先に別キーへ退避する
+    var bk = BROKEN_PREFIX + fmt(new Date());
+    try {
+      localStorage.setItem(bk, t);
+      loadError = "保存データを読めなかったため、記録を空の状態で開始しています。読めなかったデータは退避済みです（設定タブ →「データ」から取り出せます）。";
+    } catch(e2) {
+      console.error("[flourish] 破損データの退避に失敗しました", e2);
+      saveBlocked = true;
+      loadError = "保存データを読めず、退避もできませんでした。原本を守るため保存を停止しています。この画面を閉じずにオーナーに連絡してください。";
+    }
+    return defaultData();
+  }
+}
+function brokenKeys(){
+  var ks = [];
   try {
-    var t = localStorage.getItem(KEY);
-    if (t) return migrate(JSON.parse(t));
-  } catch(e) {}
-  return defaultData();
+    for (var i=0;i<localStorage.length;i++){
+      var k = localStorage.key(i);
+      if (k && k.indexOf(BROKEN_PREFIX) === 0) ks.push(k);
+    }
+  } catch(e) { console.error("[flourish] 退避データを列挙できませんでした", e); }
+  return ks.sort();
 }
 var S = load();
 var tab = "log";
@@ -260,10 +297,12 @@ function esc(s){
   });
 }
 function save(){
+  if (saveBlocked) { flash("保存を停止中", true); return; }
   try {
     localStorage.setItem(KEY, JSON.stringify(S));
     flash("✓ 保存済み", false);
   } catch(e) {
+    console.error("[flourish] 保存に失敗しました", e);
     flash("保存エラー: " + (e && e.message || e), true);
   }
 }
@@ -274,8 +313,16 @@ function flash(msg, isErr){
   clearTimeout(saveTimer);
   if (!isErr) saveTimer = setTimeout(function(){ el.textContent=""; }, 1500);
 }
-function copyText(t){
-  try { navigator.clipboard.writeText(t); return true; } catch(e){ return false; }
+// writeText は Promise を返すため、同期 try/catch だけでは拒否を取りこぼして「コピーしました」と嘘をつく
+function copyText(t, done){
+  var p;
+  try { p = navigator.clipboard && navigator.clipboard.writeText(t); }
+  catch(e) { console.error("[flourish] クリップボードを呼べませんでした", e); done(false); return; }
+  if (!p || typeof p.then !== "function") { done(false); return; }
+  p.then(function(){ done(true); }, function(e){
+    console.error("[flourish] クリップボードへ書き込めませんでした", e);
+    done(false);
+  });
 }
 
 /* ================= 部品HTML ================= */
@@ -569,7 +616,18 @@ function viewSettings(){
     + '<textarea rows="3" id="imp" class="mono" placeholder="ここにJSONを貼り付け"></textarea>'
     + '<button class="ghost" style="margin-top:6px" data-action="import">取り込む</button>';
   if (setNote) h += '<p class="note" style="color:'+(setNote.indexOf("完了")>=0?'var(--pine)':'var(--sienna)')+'">'+esc(setNote)+'</p>';
-  h += '</div></div>';
+  h += '</div>';
+
+  var bks = brokenKeys();
+  if (bks.length) {
+    h += '<div style="padding:8px 0 4px"><p class="note" style="color:var(--sienna)">読み込めなかった保存データを退避しています。</p>';
+    bks.forEach(function(k){
+      h += '<button class="ghost" style="margin-top:6px" data-action="showbroken" data-key="'+esc(k)+'">'
+        + esc(k.slice(BROKEN_PREFIX.length)) + ' の退避データを表示</button>';
+    });
+    h += '</div>';
+  }
+  h += '</div>';
 
   h += '<div class="card"><div class="chead"><span class="ctitle">初期化</span></div><div style="padding:8px 0">';
   h += armed
@@ -578,7 +636,7 @@ function viewSettings(){
   h += '</div></div>';
 
   h += '<p class="foot">データはこの端末のブラウザ(このアプリ)内にのみ保存されます。バックアップはJSONコピーで。'
-    + 'このアプリの役割は計測と週次フィードバックまで — 行動を変えるのは環境設計の仕事です。 v2.0</p>';
+    + 'このアプリの役割は計測と週次フィードバックまで — 行動を変えるのは環境設計の仕事です。 v2.1</p>';
   return h;
 }
 
@@ -591,6 +649,8 @@ function render(){
     : tab==="trend" ? viewTrend(today)
     : tab==="review" ? viewReview(today)
     : viewSettings();
+  document.getElementById("banner").innerHTML =
+    loadError ? '<div class="banner err">'+esc(loadError)+'</div>' : "";
   document.getElementById("view").innerHTML = v;
   document.getElementById("nav").innerHTML = TABS.map(function(t){
     return '<button class="tb'+(tab===t[0]?' on':'')+'" data-nav="'+t[0]+'">'+t[1]+'</button>';
@@ -655,13 +715,24 @@ document.addEventListener("click", function(ev){
   }
   if (a === "expcsv" || a === "expjson") {
     expText = a==="expcsv" ? buildCSV(S) : JSON.stringify(S, null, 2);
-    expNote = copyText(expText) ? "コピーしました" : "コピーできない場合は下を長押しして選択してください";
+    // 成功が確定するまでは手動コピーの案内を出しておく(失敗したまま残っても嘘にならない)
+    expNote = "コピーできない場合は下を長押しして選択してください";
+    render();
+    copyText(expText, function(ok){ if (ok) { expNote = "コピーしました"; render(); } });
+    return;
+  }
+  if (a === "showbroken") {
+    var bk = ac.dataset.key;
+    try { expText = localStorage.getItem(bk) || ""; expNote = "退避データです。長押しでコピーし、下の取り込み欄に貼り付けてください"; }
+    catch(e) { console.error("[flourish] 退避データを読めませんでした", e); expText = ""; expNote = "退避データを読めませんでした"; }
     render(); return;
   }
   if (a === "copyreview") {
     revText = buildReviewText(S, fmt(new Date()));
-    revNote = copyText(revText) ? "コピーしました。Claudeのチャットに貼り付けてください" : "下を長押ししてコピーしてください";
-    render(); return;
+    revNote = "下を長押ししてコピーしてください";
+    render();
+    copyText(revText, function(ok){ if (ok) { revNote = "コピーしました。Claudeのチャットに貼り付けてください"; render(); } });
+    return;
   }
   if (a === "import") {
     var ta = document.getElementById("imp");
@@ -702,6 +773,7 @@ window.__flourish = {
   achieved: achieved, phi: phi, buildCSV: buildCSV, weekStats: weekStats,
   defaultData: defaultData, migrate: migrate, fmt: fmt, weekStart: weekStart,
   buildReviewText: buildReviewText, KEY: KEY,
+  brokenKeys: brokenKeys, BROKEN_PREFIX: BROKEN_PREFIX,
 };
 
 render();

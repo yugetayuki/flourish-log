@@ -3,8 +3,8 @@
 個人用の朝の行動計測PWA。オーナーの幸福(flourishing)フレームワーク実装の一部として、
 Claude.ai チャット上で要件定義〜v2.0まで開発された。本書は Claude Code への引き継ぎ資料。
 
-- 最終更新: 2026-08-08 / 現行バージョン: **v2.0**(`index.html` 内 eyebrow 表記と一致させること)
-- テスト: `npm install && npm test`(vitest, 13本, 全パスが引き継ぎ時点の状態)
+- 最終更新: 2026-08-08 / 現行バージョン: **v2.1**(`index.html` 内 eyebrow 表記と一致させること)
+- テスト: `npm install && npm test`(vitest, 24本, 全パス)
 
 ---
 
@@ -32,7 +32,7 @@ Claude.ai チャット上で要件定義〜v2.0まで開発された。本書は
 
 ---
 
-## 2. 現状(v2.0)
+## 2. 現状(v2.1)
 
 - **形態**: 依存ゼロの単一ファイルPWA(`index.html` のみ)。vanilla JS + インラインCSS + インラインSVGチャート。
   フレームワーク・CDN・ビルド工程なし(オフライン耐性と検証容易性のための意図的選択)。
@@ -51,7 +51,7 @@ Claude.ai チャット上で要件定義〜v2.0まで開発された。本書は
 | 週 | 項目×7日のドットグリッド、達成数/目標、眠れた感の色ドット(計測のみ)、入力日数 |
 | 推移 | 28日SVG折れ線: 就寝時刻・YouTube(達成ライン点線つき)・体重(数値がある場合のみ) |
 | 週報 | 今週サマリーチップ / 週報データコピー / 相関ヒント(φ係数、28日ロック) |
-| 設定 | 週目標ステッパー / 達成ライン / 項目表示トグル / カスタム項目 / CSV・JSONエクスポート / JSON取り込み(復元) / 2段階初期化 |
+| 設定 | 週目標ステッパー / 達成ライン / 項目表示トグル / カスタム項目 / CSV・JSONエクスポート / JSON取り込み(復元) / 退避データの取り出し(破損時のみ表示) / 2段階初期化 |
 
 ---
 
@@ -103,9 +103,18 @@ vitest.config.js  environment: node(テスト側で手動JSDOMを構築するた
 ### 不変条件・約束事
 - **`migrate()` が後方互換の要。** スキーマ変更時は必ず `migrate()` を拡張し `version` を上げる。
   既存ユーザーデータ(JSON取り込み経由の旧データ含む)が壊れないことをテストで保証すること。
-- **`window.__flourish` テストフックを削除しない。** テストが依存(getS/setS/achieved/phi/buildCSV/weekStats/defaultData/migrate/fmt/weekStart/buildReviewText/KEY/save/render)。
+- **`window.__flourish` テストフックを削除しない。** テストが依存(getS/setS/achieved/phi/buildCSV/weekStats/defaultData/migrate/fmt/weekStart/buildReviewText/KEY/save/render/brokenKeys/BROKEN_PREFIX)。
 - 達成判定は `achieved(data, entry, id)` に一元化。週集計は `weekStats()`。φ係数は `phi()`(分母0は0を返す)。
 - 週の起点は月曜(`monIdx`)。日付キーはローカルタイム `YYYY-MM-DD`。
+- **保存データを読めなかったとき、原本を消さない(v2.1)。** `load()` は JSON.parse に失敗したら
+  原本を `flourish-log-v2-broken-<YYYY-MM-DD>` へ退避してから初期状態で起動し、`#banner` に警告を出す。
+  退避にも失敗した場合は `saveBlocked` を立てて `save()` を止める(初期状態での上書き = 復旧不能を防ぐため)。
+  退避データは設定タブ →「データ」から取り出して取り込み欄に戻せる。この経路を壊さないこと。
+- **`copyText(text, done)` は非同期。** `navigator.clipboard.writeText` は Promise を返すため、
+  同期の戻り値で成否を判断しない。呼び出し側は失敗時の文言を先に描画し、成功したときだけ差し替える
+  (成功表示を既定にすると、拒否された場合に「コピーしました」と嘘をつく)。
+- **CSV は `csvCell()` を通す(RFC4180)。** カスタム項目のラベルは自由入力なので、
+  カンマ・引用符・改行で列がずれる。ヘッダー・データ行の両方に適用すること。
 
 ---
 
@@ -144,9 +153,13 @@ npm test        # = npx vitest run
 - 方式: 出荷物である `index.html` そのものを `JSDOM(html, {runScripts:"dangerously"})` で起動し、
   実DOMのボタンを `.click()` して `localStorage` の中身と再描画結果を検証する。
   復元テストは `beforeParse(w)` で localStorage をシードして「再起動」を再現。
-- 現行13本の範囲: 起動描画 / タップ→即時保存→✓表示 / 同値2タップで未入力化 / 再起動復元 /
+- 現行24本の範囲: 起動描画 / タップ→即時保存→✓表示 / 同値2タップで未入力化 / 再起動復元 /
   achieved・phi・buildCSV・週報テキストのロジック / 週タブのドットと達成数 / 相関ロック /
-  CSVエクスポート / JSON取り込み / 2段階初期化。
+  CSVエクスポート / JSON取り込み / 2段階初期化 /
+  **破損データの退避・バナー・退避失敗時の保存停止・退避データの取り出し(4本)** /
+  **クリップボード成功/拒否/API不在の表示(4本)** / **CSVのカンマ・引用符エスケープ(2本)**。
+- 非同期を検証するテストは `boot(seed, prepare)` の `prepare(w)` で起動前の環境
+  (壊れた保存データ、`Storage.prototype.setItem` の失敗)を作り、`stubClipboard` + `await tick()` で待つ。
 - **ルール: 全ての変更はテスト追加・更新とセット。デプロイ前に all green。**
   UIラベルはテストが `textContent` 一致で参照している(例: 「✓ した」「取り込む」「CSVをコピー」)。
   文言変更時はテストも更新すること。
@@ -157,7 +170,8 @@ npm test        # = npx vitest run
 
 - GitHub Pages。`index.html` をmainにcommit → 数分で自動反映。
 - **リリース手順**: (1) テスト all green → (2) `index.html` 内の eyebrow バージョン表記を上げる
-  (例 v2.0 → v2.1) → (3) commit/push → (4) 実機Safariで再読み込みしバージョン表記で反映確認 →
+  (例 v2.1 → v2.2。`package.json` / `package-lock.json` の version も揃える)
+  → (3) commit/push → (4) 実機Safariで再読み込みしバージョン表記で反映確認 →
   (5) 1タップして「✓ 保存済み」を確認。
 - **iOSの容器に注意**: ホーム画面追加したPWAとSafariタブは localStorage の容器が別。
   オーナーの運用は「ホームのアイコンから開く」に固定されている。デバッグで挙動差を見たらまずこれを疑う。
@@ -196,6 +210,13 @@ v2.0に至るまでに以下を検証して破棄した。同じ穴を掘り直�
 - 実機での長期永続性の観察(iOS/WebKitのサイトデータ削除ポリシーとホーム画面PWA容器の挙動)。
   月1バックアップをアプリ内で軽く促す仕組み(例: 設定タブに最終エクスポート日を表示)。ただし通知圧は禁止。
 - 遡及入力の上限(現在7日)の妥当性レビュー。
+- **日付またぎで `sel` が今日に追随しない(未確認)。** `sel` は起動時の `fmt(new Date())` のみで、
+  以降は日付ナビでしか変わらない。アプリを開いたまま日付が変わり、かつ再読み込みが走らない場合、
+  翌朝の入力が前日の欄に入りうる。iOSホーム画面PWAが復帰時に再読み込みされるかは実機未確認。
+  対処するなら `visibilitychange` で today と `sel` を突き合わせる案。まず実機確認から。
+- **属性値のエスケープ漏れ。** `data-del="…"` / `data-tgt="…"` に `custom[].id` が `esc()` を通さず
+  埋まる(実測で任意属性の注入を確認)。悪用には細工したJSONを自分で取り込む必要があり実害リスクは低いが、
+  `esc()` を通すのが自然。v2.1では未対応。
 
 **P2**
 - Service Worker 導入(オフライン完全化+更新制御)。導入時は**キャッシュ無効化戦略を先に設計**
@@ -226,7 +247,7 @@ v2.0に至るまでに以下を検証して破棄した。同じ穴を掘り直�
 ## クイックスタート(Claude Code 初回セッション用)
 
 ```bash
-npm install && npm test      # 13 passed を確認してから作業開始
+npm install && npm test      # 24 passed を確認してから作業開始
 ```
 1. 本書 §1 の設計制約を読む(これが受け入れ基準)。
 2. 変更 → テスト追加/更新 → all green → バージョン表記を上げて commit。

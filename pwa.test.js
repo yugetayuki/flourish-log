@@ -5,26 +5,37 @@ import { describe, it, expect } from "vitest";
 const html = readFileSync("index.html", "utf8");
 const KEY = "flourish-log-v2";
 
-const boot = (seed) =>
+// prepare(w) で「起動より前の環境」(壊れた保存データ・setItem の失敗など)を作り込む
+const boot = (seed, prepare) =>
   new JSDOM(html, {
     runScripts: "dangerously",
     url: "https://flourish.test/",
-    beforeParse(w) { if (seed) w.localStorage.setItem(KEY, seed); },
+    beforeParse(w) {
+      if (seed) w.localStorage.setItem(KEY, seed);
+      if (prepare) prepare(w);
+    },
   });
 
 const q = (dom, s) => dom.window.document.querySelector(s);
 const qa = (dom, s) => [...dom.window.document.querySelectorAll(s)];
 const byText = (dom, sel, text) => qa(dom, sel).find((el) => el.textContent.trim() === text);
+const tick = () => new Promise((r) => setTimeout(r, 0));
+const stubClipboard = (dom, impl) => { dom.window.navigator.clipboard = { writeText: impl }; };
 
-describe("PWA v2.0: 起動と基本描画", () => {
-  it("記録タブが描画され、v2.0表示がある", () => {
+describe("PWA v2.1: 起動と基本描画", () => {
+  it("記録タブが描画され、v2.1表示がある", () => {
     const dom = boot();
     expect(q(dom, "#view").textContent).toContain("就寝時刻");
-    expect(q(dom, ".eyebrow").textContent).toContain("v2.0");
+    expect(q(dom, ".eyebrow").textContent).toContain("v2.1");
+  });
+
+  it("正常起動では警告バナーを出さない", () => {
+    const dom = boot();
+    expect(q(dom, "#banner").innerHTML).toBe("");
   });
 });
 
-describe("PWA v2.0: 保存と復元", () => {
+describe("PWA v2.1: 保存と復元", () => {
   it("タップ→localStorageに即保存され✓保存済みが出る", () => {
     const dom = boot();
     byText(dom, "button.sb", "✓ した").click(); // 最初の「した」=アシュワガンダ
@@ -53,7 +64,7 @@ describe("PWA v2.0: 保存と復元", () => {
   });
 });
 
-describe("PWA v2.0: ロジック(移植の同一性)", () => {
+describe("PWA v2.1: ロジック(移植の同一性)", () => {
   it("achieved: 就寝ライン/チェック/未入力", () => {
     const f = boot().window.__flourish;
     const d = f.defaultData();
@@ -90,7 +101,7 @@ describe("PWA v2.0: ロジック(移植の同一性)", () => {
   });
 });
 
-describe("PWA v2.0: 週タブ・週報タブ", () => {
+describe("PWA v2.1: 週タブ・週報タブ", () => {
   it("週タブ: 達成した項目が1/6と表示されドットが出る", () => {
     const f0 = boot().window.__flourish;
     const d = f0.defaultData();
@@ -109,7 +120,7 @@ describe("PWA v2.0: 週タブ・週報タブ", () => {
   });
 });
 
-describe("PWA v2.0: 設定タブ", () => {
+describe("PWA v2.1: 設定タブ", () => {
   it("CSVエクスポート: テキストエリアにdate,ヘッダーが出る", () => {
     const dom = boot();
     byText(dom, "button.tb", "設定").click();
@@ -142,5 +153,115 @@ describe("PWA v2.0: 設定タブ", () => {
     byText(dom, "button.danger", "本当に削除する(取り消せません)").click();
     const saved = JSON.parse(dom.window.localStorage.getItem(KEY));
     expect(Object.keys(saved.entries).length).toBe(0);
+  });
+});
+
+describe("PWA v2.1: 壊れた保存データを黙って消さない", () => {
+  const BROKEN = '{"version":2,"entries":{"2026-08-01":{"gym":true}'; // 末尾が欠けたJSON
+
+  it("解析に失敗したら警告バナーを出し、原本を退避キーへ移す", () => {
+    const dom = boot(BROKEN);
+    expect(q(dom, "#banner .banner.err")).not.toBe(null);
+    const keys = dom.window.__flourish.brokenKeys();
+    expect(keys.length).toBe(1);
+    expect(dom.window.localStorage.getItem(keys[0])).toBe(BROKEN);
+  });
+
+  it("退避後にタップしても、退避された原本は上書きされない", () => {
+    const dom = boot(BROKEN);
+    const key = dom.window.__flourish.brokenKeys()[0];
+    byText(dom, "button.sb", "✓ した").click();
+    expect(JSON.parse(dom.window.localStorage.getItem(KEY)).entries).not.toEqual({});
+    expect(dom.window.localStorage.getItem(key)).toBe(BROKEN);
+  });
+
+  it("退避データは設定タブから取り出して取り込み欄に戻せる", () => {
+    const dom = boot(BROKEN);
+    byText(dom, "button.tb", "設定").click();
+    const btn = q(dom, '[data-action="showbroken"]');
+    expect(btn).not.toBe(null);
+    btn.click();
+    expect(q(dom, "#exp").value).toBe(BROKEN);
+  });
+
+  it("退避できなかった場合は保存を止め、原本をそのまま残す", () => {
+    const dom = boot(BROKEN, (w) => {
+      const orig = w.Storage.prototype.setItem;
+      w.Storage.prototype.setItem = function (k, v) {
+        if (String(k).startsWith(KEY + "-broken-")) throw new Error("quota exceeded");
+        return orig.call(this, k, v);
+      };
+    });
+    expect(dom.window.__flourish.brokenKeys().length).toBe(0);
+    byText(dom, "button.sb", "✓ した").click();
+    expect(q(dom, "#saveState").textContent).toBe("保存を停止中");
+    expect(dom.window.localStorage.getItem(KEY)).toBe(BROKEN);
+  });
+});
+
+describe("PWA v2.1: コピー結果を偽らない", () => {
+  const openExport = (dom) => {
+    byText(dom, "button.tb", "設定").click();
+    byText(dom, "button.ghost", "CSVをコピー").click();
+  };
+
+  it("クリップボードが成功したら「コピーしました」に変わる", async () => {
+    const dom = boot();
+    stubClipboard(dom, () => Promise.resolve());
+    openExport(dom);
+    await tick();
+    expect(q(dom, ".note").textContent).toContain("コピーしました");
+  });
+
+  it("クリップボードが拒否されたら「コピーしました」と言わず手動コピーを案内する", async () => {
+    const dom = boot();
+    stubClipboard(dom, () => Promise.reject(new Error("denied")));
+    openExport(dom);
+    await tick();
+    const note = q(dom, ".note").textContent;
+    expect(note).not.toContain("コピーしました");
+    expect(note).toContain("長押し");
+    expect(q(dom, "#exp").value.startsWith("date,")).toBe(true);
+  });
+
+  it("週報コピーも拒否時に成功表示にならない", async () => {
+    const f0 = boot().window.__flourish;
+    const seeded = f0.defaultData();
+    seeded.entries[f0.fmt(new Date())] = { gym: true }; // 入力0日だとコピーボタンが無効
+    const dom = boot(JSON.stringify(seeded));
+    stubClipboard(dom, () => Promise.reject(new Error("denied")));
+    byText(dom, "button.tb", "週報").click();
+    byText(dom, "button.bigbtn", "週報用データをコピー").click();
+    await tick();
+    expect(q(dom, ".note").textContent).not.toContain("コピーしました");
+    expect(q(dom, "#revout").value).toContain("【事実】");
+  });
+
+  it("クリップボードAPIが無い環境でも例外を投げずテキストを出す", () => {
+    const dom = boot();
+    expect(dom.window.navigator.clipboard).toBe(undefined);
+    openExport(dom);
+    expect(q(dom, "#exp").value.startsWith("date,")).toBe(true);
+  });
+});
+
+describe("PWA v2.1: CSVの列ずれ", () => {
+  it("カンマを含むカスタム項目名でも列数が一致する", () => {
+    const f = boot().window.__flourish;
+    const d = f.defaultData();
+    d.custom = [{ id: "c_a", label: "読書, 英語", target: 5 }];
+    d.entries["2026-08-08"] = { gym: true, c_a: true };
+    const [head, row] = f.buildCSV(d).split("\n");
+    expect(head).toContain('"読書, 英語"');
+    expect(head.split('"').length).toBe(3); // 引用符は1フィールド分の2つだけ
+    expect(row).toBe("2026-08-08,,,,,,,,1,,1");
+  });
+
+  it("引用符を含むラベルは二重引用符でエスケープする", () => {
+    const f = boot().window.__flourish;
+    const d = f.defaultData();
+    d.custom = [{ id: "c_b", label: '「"読書"」', target: 5 }];
+    const head = f.buildCSV(d).split("\n")[0];
+    expect(head.endsWith('"「""読書""」"')).toBe(true);
   });
 });
