@@ -22,20 +22,36 @@ const byText = (dom, sel, text) => qa(dom, sel).find((el) => el.textContent.trim
 const tick = () => new Promise((r) => setTimeout(r, 0));
 const stubClipboard = (dom, impl) => { dom.window.navigator.clipboard = { writeText: impl }; };
 
-describe("PWA v2.2: 起動と基本描画", () => {
-  it("記録タブが描画され、v2.2表示がある", () => {
+describe("PWA v2.3: 起動と基本描画", () => {
+  it("記録タブが描画され、v2.3表示がある", () => {
     const dom = boot();
     expect(q(dom, "#view").textContent).toContain("就寝時刻");
-    expect(q(dom, ".eyebrow").textContent).toContain("v2.2");
+    expect(q(dom, ".eyebrow").textContent).toContain("v2.3");
   });
 
   it("正常起動では警告バナーを出さない", () => {
     const dom = boot();
     expect(q(dom, "#banner").innerHTML).toBe("");
   });
+
+  // 表示名はタブ・ホーム画面アイコン・見出しの3箇所にあり、片方だけ直すと食い違う
+  it("表示名 Aubade がタイトル・ホーム画面名・見出しで一致する", () => {
+    const dom = boot();
+    expect(q(dom, "title").textContent).toBe("Aubade");
+    expect(q(dom, 'meta[name="apple-mobile-web-app-title"]').getAttribute("content")).toBe("Aubade");
+    expect(q(dom, "h1").textContent).toBe("Aubade");
+  });
+
+  // 表示名を変えても保存キーは据え置く。変えると既存の記録が読めなくなる
+  it("保存キーは flourish-log-v2 のまま", () => {
+    const dom = boot();
+    byText(dom, "button.sb", "✓ した").click();
+    expect(dom.window.__flourish.KEY).toBe("flourish-log-v2");
+    expect(dom.window.localStorage.getItem("flourish-log-v2")).not.toBe(null);
+  });
 });
 
-describe("PWA v2.2: 保存と復元", () => {
+describe("PWA v2.3: 保存と復元", () => {
   it("タップ→localStorageに即保存され✓保存済みが出る", () => {
     const dom = boot();
     byText(dom, "button.sb", "✓ した").click(); // 最初の「した」=アシュワガンダ
@@ -64,7 +80,7 @@ describe("PWA v2.2: 保存と復元", () => {
   });
 });
 
-describe("PWA v2.2: ロジック(移植の同一性)", () => {
+describe("PWA v2.3: ロジック(移植の同一性)", () => {
   it("achieved: 就寝ライン/チェック/未入力", () => {
     const f = boot().window.__flourish;
     const d = f.defaultData();
@@ -101,7 +117,7 @@ describe("PWA v2.2: ロジック(移植の同一性)", () => {
   });
 });
 
-describe("PWA v2.2: 週タブ・週報タブ", () => {
+describe("PWA v2.3: 週タブ・週報タブ", () => {
   it("週タブ: 達成した項目が1/6と表示されドットが出る", () => {
     const f0 = boot().window.__flourish;
     const d = f0.defaultData();
@@ -120,7 +136,7 @@ describe("PWA v2.2: 週タブ・週報タブ", () => {
   });
 });
 
-describe("PWA v2.2: 設定タブ", () => {
+describe("PWA v2.3: 設定タブ", () => {
   it("CSVエクスポート: テキストエリアにdate,ヘッダーが出る", () => {
     const dom = boot();
     byText(dom, "button.tb", "設定").click();
@@ -156,7 +172,7 @@ describe("PWA v2.2: 設定タブ", () => {
   });
 });
 
-describe("PWA v2.2: 壊れた保存データを黙って消さない", () => {
+describe("PWA v2.3: 壊れた保存データを黙って消さない", () => {
   const BROKEN = '{"version":2,"entries":{"2026-08-01":{"gym":true}'; // 末尾が欠けたJSON
 
   it("解析に失敗したら警告バナーを出し、原本を退避キーへ移す", () => {
@@ -199,7 +215,7 @@ describe("PWA v2.2: 壊れた保存データを黙って消さない", () => {
   });
 });
 
-describe("PWA v2.2: コピー結果を偽らない", () => {
+describe("PWA v2.3: コピー結果を偽らない", () => {
   const openExport = (dom) => {
     byText(dom, "button.tb", "設定").click();
     byText(dom, "button.ghost", "CSVをコピー").click();
@@ -245,7 +261,7 @@ describe("PWA v2.2: コピー結果を偽らない", () => {
   });
 });
 
-describe("PWA v2.2: CSVの列ずれ", () => {
+describe("PWA v2.3: CSVの列ずれ", () => {
   it("カンマを含むカスタム項目名でも列数が一致する", () => {
     const f = boot().window.__flourish;
     const d = f.defaultData();
@@ -266,7 +282,7 @@ describe("PWA v2.2: CSVの列ずれ", () => {
   });
 });
 
-describe("PWA v2.2: 配信ポリシー", () => {
+describe("PWA v2.3: 配信ポリシー", () => {
   it("CSPで外部への持ち出し経路を塞いでいる", () => {
     const csp = q(boot(), 'meta[http-equiv="Content-Security-Policy"]');
     expect(csp).not.toBe(null);
@@ -290,7 +306,7 @@ describe("PWA v2.2: 配信ポリシー", () => {
   });
 });
 
-describe("PWA v2.2: 取り込んだJSONを信用しない", () => {
+describe("PWA v2.3: 取り込んだJSONを信用しない", () => {
   const EVIL = 'c_x" data-action="reset2';
   const importJson = (dom, data) => {
     byText(dom, "button.tb", "設定").click();

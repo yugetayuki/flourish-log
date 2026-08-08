@@ -1,10 +1,22 @@
-# 繁栄ログ (Flourish Log) — 開発引き継ぎドキュメント
+# Aubade — 開発引き継ぎドキュメント
 
 個人用の朝の行動計測PWA。オーナーの幸福(flourishing)フレームワーク実装の一部として、
 Claude.ai チャット上で要件定義〜v2.0まで開発された。本書は Claude Code への引き継ぎ資料。
 
-- 最終更新: 2026-08-08 / 現行バージョン: **v2.2**(`index.html` 内 eyebrow 表記と一致させること)
-- テスト: `npm install && npm test`(vitest, 32本, 全パス)
+- 最終更新: 2026-08-08 / 現行バージョン: **v2.3**(`index.html` 内 eyebrow 表記と一致させること)
+- テスト: `npm install && npm test`(vitest, 34本, 全パス)
+
+### 名前について(v2.3で改称)
+
+表示名は **Aubade**(オーバード / 夜明けの歌)。`<title>` / `<h1>` / `apple-mobile-web-app-title` の
+3箇所にあり、テスト「表示名 Aubade が…一致する」が食い違いを検出する。
+
+**識別子は旧名 `flourish-log` のまま据え置く。** 改称に合わせて変えてはいけない:
+- `localStorage` キー `flourish-log-v2` — 変えると既存の記録が読めなくなる(退避キーの接頭辞も同様)
+- リポジトリ名と公開URL — 変えるとホーム画面に追加済みのPWAが切れる
+- `window.__flourish` テストフック / `console.error("[flourish] …")` の接頭辞
+
+旧称は「繁栄ログ (Flourish Log)」。v2.2 までのコミットとチャット履歴ではこの名前で出てくる。
 
 ---
 
@@ -33,7 +45,7 @@ Claude.ai チャット上で要件定義〜v2.0まで開発された。本書は
 
 ---
 
-## 2. 現状(v2.2)
+## 2. 現状(v2.3)
 
 - **形態**: 依存ゼロの単一ファイルPWA(`index.html` のみ)。vanilla JS + インラインCSS + インラインSVGチャート。
   フレームワーク・CDN・ビルド工程なし(オフライン耐性と検証容易性のための意図的選択)。
@@ -168,13 +180,14 @@ npm test        # = npx vitest run
 - 方式: 出荷物である `index.html` そのものを `JSDOM(html, {runScripts:"dangerously"})` で起動し、
   実DOMのボタンを `.click()` して `localStorage` の中身と再描画結果を検証する。
   復元テストは `beforeParse(w)` で localStorage をシードして「再起動」を再現。
-- 現行32本の範囲: 起動描画 / タップ→即時保存→✓表示 / 同値2タップで未入力化 / 再起動復元 /
+- 現行34本の範囲: 起動描画 / タップ→即時保存→✓表示 / 同値2タップで未入力化 / 再起動復元 /
   achieved・phi・buildCSV・週報テキストのロジック / 週タブのドットと達成数 / 相関ロック /
   CSVエクスポート / JSON取り込み / 2段階初期化 /
   破損データの退避・バナー・退避失敗時の保存停止・退避データの取り出し(4本) /
   クリップボード成功/拒否/API不在の表示(4本) / CSVのカンマ・引用符エスケープ(2本) /
   **配信ポリシー: CSPのディレクティブ・noindex・外部通信ゼロ(3本)** /
-  **取り込みJSONの不信任: 属性注入・エスケープ後の動作・型正規化・配列拒否(5本)**。
+  **取り込みJSONの不信任: 属性注入・エスケープ後の動作・型正規化・配列拒否(5本)** /
+  **表示名の3箇所一致・保存キーの据え置き(2本)**。
 - 非同期を検証するテストは `boot(seed, prepare)` の `prepare(w)` で起動前の環境
   (壊れた保存データ、`Storage.prototype.setItem` の失敗)を作り、`stubClipboard` + `await tick()` で待つ。
 - **CSPの実挙動は JSDOM では検証できない。** JSDOM は CSP を解釈しないため、テストは
@@ -190,7 +203,7 @@ npm test        # = npx vitest run
 
 - GitHub Pages。`main` の `/`(ルート)を配信元にしてあるので、`index.html` を push → 数分で自動反映。
 - **リリース手順**: (1) テスト all green → (2) `index.html` 内の eyebrow バージョン表記を上げる
-  (例 v2.2 → v2.3。`package.json` / `package-lock.json` の version も揃える)
+  (例 v2.3 → v2.4。`package.json` / `package-lock.json` の version も揃える)
   → (3) commit/push → (4) 実機Safariで再読み込みしバージョン表記で反映確認 →
   (5) 1タップして「✓ 保存済み」を確認。
 - **iOSの容器に注意**: ホーム画面追加したPWAとSafariタブは localStorage の容器が別。
@@ -285,7 +298,7 @@ v2.0に至るまでに以下を検証して破棄した。同じ穴を掘り直�
 ## クイックスタート(Claude Code 初回セッション用)
 
 ```bash
-npm install && npm test      # 32 passed を確認してから作業開始
+npm install && npm test      # 34 passed を確認してから作業開始
 ```
 1. 本書 §1 の設計制約を読む(これが受け入れ基準)。
 2. 変更 → テスト追加/更新 → all green → バージョン表記を上げて commit。
