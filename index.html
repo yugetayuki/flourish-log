@@ -2,6 +2,12 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
+<!-- 単一ファイル・外部通信ゼロという実態をブラウザ側にも宣言する。
+     connect-src 'none' により、万一HTMLを注入されても記録を外部へ持ち出せない。
+     インラインの script/style は本アプリの本体なので 'unsafe-inline' は外せない。
+     frame-ancestors は meta 経由では無視される仕様のため、ここには書いていない。 -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'">
+<meta name="robots" content="noindex, nofollow">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>繁栄ログ</title>
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -112,7 +118,7 @@ svg{display:block}
 <body>
 <div id="wrap">
   <header>
-    <div class="title"><h1>繁栄ログ</h1><span class="eyebrow mono">MORNING&nbsp;LOG&nbsp;·&nbsp;v2.1</span></div>
+    <div class="title"><h1>繁栄ログ</h1><span class="eyebrow mono">MORNING&nbsp;LOG&nbsp;·&nbsp;v2.2</span></div>
     <span id="saveState"></span>
   </header>
   <div id="banner"></div>
@@ -160,14 +166,29 @@ function defaultData(){
     entries: {},
   };
 }
+function isPlainObject(v){ return !!v && typeof v === "object" && !Array.isArray(v); }
+// JSON取り込みが唯一の外部入力経路。ここを通った後は型が揃っている前提でUIを書く
+function normCustom(list){
+  if (!Array.isArray(list)) return [];
+  return list.filter(function(c){ return isPlainObject(c) && typeof c.id === "string" && c.id !== ""; })
+    .map(function(c){
+      var t = Number(c.target);
+      return {
+        id: c.id,
+        label: String(c.label == null ? c.id : c.label),
+        target: isFinite(t) ? Math.min(7, Math.max(0, Math.round(t))) : 5,
+      };
+    });
+}
 function migrate(d){
   var b = defaultData();
-  var o = Object.assign({}, b, d || {});
-  o.targets = Object.assign({}, b.targets, (d && d.targets) || {});
-  o.th = Object.assign({}, b.th, (d && d.th) || {});
-  o.enabled = Object.assign({}, b.enabled, (d && d.enabled) || {});
-  o.custom = (d && Array.isArray(d.custom)) ? d.custom : [];
-  o.entries = (d && d.entries) || {};
+  var o = Object.assign({}, b, isPlainObject(d) ? d : {});
+  o.version = 2;
+  o.targets = Object.assign({}, b.targets, isPlainObject(d && d.targets) ? d.targets : {});
+  o.th = Object.assign({}, b.th, isPlainObject(d && d.th) ? d.th : {});
+  o.enabled = Object.assign({}, b.enabled, isPlainObject(d && d.enabled) ? d.enabled : {});
+  o.custom = normCustom(d && d.custom);
+  o.entries = isPlainObject(d && d.entries) ? d.entries : {};
   return o;
 }
 function achieved(data, e, id){
@@ -330,7 +351,7 @@ function seg(f, opts, val, colors){
   var h = '<div class="seg" style="grid-template-columns:repeat('+opts.length+',1fr)">';
   opts.forEach(function(o,i){
     var on = val === i;
-    h += '<button class="sb'+(on?' on '+colors[i]:'')+'" data-f="'+f+'" data-v="'+i+'" aria-pressed="'+on+'">'+esc(o)+'</button>';
+    h += '<button class="sb'+(on?' on '+colors[i]:'')+'" data-f="'+esc(f)+'" data-v="'+i+'" aria-pressed="'+on+'">'+esc(o)+'</button>';
   });
   return h + '</div>';
 }
@@ -338,7 +359,7 @@ function pairBtn(f, val){
   function b(v, lab){
     var on = val === (v==="t");
     var cls = v==="t" ? "on-pine" : "on-gray";
-    return '<button class="sb'+(on?' on '+cls:'')+'" data-f="'+f+'" data-v="'+v+'" aria-pressed="'+on+'">'+lab+'</button>';
+    return '<button class="sb'+(on?' on '+cls:'')+'" data-f="'+esc(f)+'" data-v="'+v+'" aria-pressed="'+on+'">'+lab+'</button>';
   }
   return '<div class="seg" style="grid-template-columns:1fr 1fr">'+b("t","✓ した")+b("f","✗ しなかった")+'</div>';
 }
@@ -573,9 +594,9 @@ function viewSettings(){
   });
   S.custom.forEach(function(c){
     h += '<div class="srow"><span style="font-size:14px">'+esc(c.label)+'</span>'
-      + '<div class="stp"><button class="stpb" data-tgt="'+c.id+'" data-d="-1">−</button>'
+      + '<div class="stp"><button class="stpb" data-tgt="'+esc(c.id)+'" data-d="-1">−</button>'
       + '<span class="stpv mono">'+c.target+'/7</span>'
-      + '<button class="stpb" data-tgt="'+c.id+'" data-d="1">＋</button></div></div>';
+      + '<button class="stpb" data-tgt="'+esc(c.id)+'" data-d="1">＋</button></div></div>';
   });
   h += '</div>';
 
@@ -599,7 +620,7 @@ function viewSettings(){
   h += '<div class="card"><div class="chead"><span class="ctitle">カスタム項目(チェック式)</span></div>';
   S.custom.forEach(function(c){
     h += '<div class="srow"><span style="font-size:14px">'+esc(c.label)+'</span>'
-      + '<button class="delbtn" data-del="'+c.id+'">削除</button></div>';
+      + '<button class="delbtn" data-del="'+esc(c.id)+'">削除</button></div>';
   });
   h += '<div class="addrow"><input id="newLabel" placeholder="例: 読書">'
     + '<button class="addbtn" data-action="addcustom">追加</button></div></div>';
@@ -636,7 +657,7 @@ function viewSettings(){
   h += '</div></div>';
 
   h += '<p class="foot">データはこの端末のブラウザ(このアプリ)内にのみ保存されます。バックアップはJSONコピーで。'
-    + 'このアプリの役割は計測と週次フィードバックまで — 行動を変えるのは環境設計の仕事です。 v2.1</p>';
+    + 'このアプリの役割は計測と週次フィードバックまで — 行動を変えるのは環境設計の仕事です。 v2.2</p>';
   return h;
 }
 
@@ -738,9 +759,13 @@ document.addEventListener("click", function(ev){
     var ta = document.getElementById("imp");
     try {
       var parsed = JSON.parse(ta.value);
+      if (!isPlainObject(parsed)) throw new Error("最上位がオブジェクトではありません");
       S = migrate(parsed);
       save(); setNote = "取り込み完了(" + Object.keys(S.entries).length + "日分)";
-    } catch(e) { setNote = "取り込み失敗: JSONを確認してください"; }
+    } catch(e) {
+      console.error("[flourish] 取り込みに失敗しました", e);
+      setNote = "取り込み失敗: JSONを確認してください";
+    }
     render(); return;
   }
   if (a === "reset1") {

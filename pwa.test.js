@@ -22,11 +22,11 @@ const byText = (dom, sel, text) => qa(dom, sel).find((el) => el.textContent.trim
 const tick = () => new Promise((r) => setTimeout(r, 0));
 const stubClipboard = (dom, impl) => { dom.window.navigator.clipboard = { writeText: impl }; };
 
-describe("PWA v2.1: 起動と基本描画", () => {
-  it("記録タブが描画され、v2.1表示がある", () => {
+describe("PWA v2.2: 起動と基本描画", () => {
+  it("記録タブが描画され、v2.2表示がある", () => {
     const dom = boot();
     expect(q(dom, "#view").textContent).toContain("就寝時刻");
-    expect(q(dom, ".eyebrow").textContent).toContain("v2.1");
+    expect(q(dom, ".eyebrow").textContent).toContain("v2.2");
   });
 
   it("正常起動では警告バナーを出さない", () => {
@@ -35,7 +35,7 @@ describe("PWA v2.1: 起動と基本描画", () => {
   });
 });
 
-describe("PWA v2.1: 保存と復元", () => {
+describe("PWA v2.2: 保存と復元", () => {
   it("タップ→localStorageに即保存され✓保存済みが出る", () => {
     const dom = boot();
     byText(dom, "button.sb", "✓ した").click(); // 最初の「した」=アシュワガンダ
@@ -64,7 +64,7 @@ describe("PWA v2.1: 保存と復元", () => {
   });
 });
 
-describe("PWA v2.1: ロジック(移植の同一性)", () => {
+describe("PWA v2.2: ロジック(移植の同一性)", () => {
   it("achieved: 就寝ライン/チェック/未入力", () => {
     const f = boot().window.__flourish;
     const d = f.defaultData();
@@ -101,7 +101,7 @@ describe("PWA v2.1: ロジック(移植の同一性)", () => {
   });
 });
 
-describe("PWA v2.1: 週タブ・週報タブ", () => {
+describe("PWA v2.2: 週タブ・週報タブ", () => {
   it("週タブ: 達成した項目が1/6と表示されドットが出る", () => {
     const f0 = boot().window.__flourish;
     const d = f0.defaultData();
@@ -120,7 +120,7 @@ describe("PWA v2.1: 週タブ・週報タブ", () => {
   });
 });
 
-describe("PWA v2.1: 設定タブ", () => {
+describe("PWA v2.2: 設定タブ", () => {
   it("CSVエクスポート: テキストエリアにdate,ヘッダーが出る", () => {
     const dom = boot();
     byText(dom, "button.tb", "設定").click();
@@ -156,7 +156,7 @@ describe("PWA v2.1: 設定タブ", () => {
   });
 });
 
-describe("PWA v2.1: 壊れた保存データを黙って消さない", () => {
+describe("PWA v2.2: 壊れた保存データを黙って消さない", () => {
   const BROKEN = '{"version":2,"entries":{"2026-08-01":{"gym":true}'; // 末尾が欠けたJSON
 
   it("解析に失敗したら警告バナーを出し、原本を退避キーへ移す", () => {
@@ -199,7 +199,7 @@ describe("PWA v2.1: 壊れた保存データを黙って消さない", () => {
   });
 });
 
-describe("PWA v2.1: コピー結果を偽らない", () => {
+describe("PWA v2.2: コピー結果を偽らない", () => {
   const openExport = (dom) => {
     byText(dom, "button.tb", "設定").click();
     byText(dom, "button.ghost", "CSVをコピー").click();
@@ -245,7 +245,7 @@ describe("PWA v2.1: コピー結果を偽らない", () => {
   });
 });
 
-describe("PWA v2.1: CSVの列ずれ", () => {
+describe("PWA v2.2: CSVの列ずれ", () => {
   it("カンマを含むカスタム項目名でも列数が一致する", () => {
     const f = boot().window.__flourish;
     const d = f.defaultData();
@@ -263,5 +263,94 @@ describe("PWA v2.1: CSVの列ずれ", () => {
     d.custom = [{ id: "c_b", label: '「"読書"」', target: 5 }];
     const head = f.buildCSV(d).split("\n")[0];
     expect(head.endsWith('"「""読書""」"')).toBe(true);
+  });
+});
+
+describe("PWA v2.2: 配信ポリシー", () => {
+  it("CSPで外部への持ち出し経路を塞いでいる", () => {
+    const csp = q(boot(), 'meta[http-equiv="Content-Security-Policy"]');
+    expect(csp).not.toBe(null);
+    const c = csp.getAttribute("content");
+    expect(c).toContain("default-src 'none'");
+    expect(c).toContain("connect-src 'none'"); // fetch/XHR/WebSocket/beacon を禁止
+    expect(c).toContain("form-action 'none'");
+    expect(c).toContain("base-uri 'none'");
+    expect(c).toContain("img-src data:"); // アイコンは data: 埋め込みのみ
+  });
+
+  it("検索エンジンに拾わせない", () => {
+    const m = q(boot(), 'meta[name="robots"]');
+    expect(m.getAttribute("content")).toContain("noindex");
+    expect(readFileSync("robots.txt", "utf8")).toContain("Disallow: /");
+  });
+
+  it("外部への通信コードとリソース参照を持たない", () => {
+    expect(html).not.toMatch(/fetch\(|XMLHttpRequest|WebSocket|sendBeacon/);
+    expect(html).not.toMatch(/(src|href)\s*=\s*["']https?:/);
+  });
+});
+
+describe("PWA v2.2: 取り込んだJSONを信用しない", () => {
+  const EVIL = 'c_x" data-action="reset2';
+  const importJson = (dom, data) => {
+    byText(dom, "button.tb", "設定").click();
+    q(dom, "#imp").value = JSON.stringify(data);
+    byText(dom, "button.ghost", "取り込む").click();
+  };
+
+  it("カスタム項目IDに仕込まれた属性は注入されない", () => {
+    const dom = boot();
+    const f = dom.window.__flourish;
+    const d = f.defaultData();
+    d.custom = [{ id: EVIL, label: "注入", target: 5 }];
+    importJson(dom, d);
+    expect(qa(dom, '[data-action="reset2"]').length).toBe(0);
+    expect(q(dom, "[data-del]").getAttribute("data-del")).toBe(EVIL);
+    byText(dom, "button.tb", "記録").click();
+    expect(qa(dom, '[data-action="reset2"]').length).toBe(0);
+  });
+
+  it("エスケープしても記録・削除は通常どおり動く", () => {
+    const dom = boot();
+    const f = dom.window.__flourish;
+    const d = f.defaultData();
+    d.custom = [{ id: EVIL, label: "注入", target: 5 }];
+    importJson(dom, d);
+    byText(dom, "button.tb", "記録").click();
+    qa(dom, "[data-f]").find((el) => el.getAttribute("data-f") === EVIL && el.dataset.v === "t").click();
+    expect(f.getS().entries[f.fmt(new Date())][EVIL]).toBe(true);
+    byText(dom, "button.tb", "設定").click();
+    q(dom, ".delbtn").click();
+    expect(f.getS().custom.length).toBe(0);
+  });
+
+  it("entriesがオブジェクトでなければ空として扱う", () => {
+    const f = boot().window.__flourish;
+    expect(f.migrate({ entries: ["2026-08-01"] }).entries).toEqual({});
+    expect(f.migrate({ entries: "壊れた" }).entries).toEqual({});
+    expect(f.migrate(null).entries).toEqual({});
+  });
+
+  it("カスタム項目の型を正規化する", () => {
+    const f = boot().window.__flourish;
+    const c = f.migrate({
+      custom: [
+        { id: "c_a", label: "読書", target: "99" },
+        { id: "c_b", target: NaN },
+        { id: "", label: "IDなし", target: 3 },
+        "文字列",
+      ],
+    }).custom;
+    expect(c.length).toBe(2); // ID不正の2件は落とす
+    expect(c[0].target).toBe(7); // 0..7 にクランプ
+    expect(c[1]).toEqual({ id: "c_b", label: "c_b", target: 5 });
+  });
+
+  it("最上位が配列のJSONは取り込まない", () => {
+    const dom = boot();
+    const f = dom.window.__flourish;
+    importJson(dom, [{ entries: {} }]);
+    expect(q(dom, "#view").textContent).toContain("取り込み失敗");
+    expect(f.getS().custom).toEqual([]);
   });
 });
