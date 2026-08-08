@@ -1,0 +1,710 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>繁栄ログ</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="繁栄ログ">
+<meta name="theme-color" content="#F6F7F3">
+<link rel="apple-touch-icon" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAALQAAAC0CAIAAACyr5FlAAACoElEQVR42u3cu1HjYBiGUVtDXY7J3AAdeMggJCKEjBYogvIInGhs6dd/g9EnnZOtR349az8I33aPp8v5AFMGdwHiQByIA3EgDsSBOBAH4kAcIA7EgTgQB+JAHIgDcSAOxAHiQByIA3EgDsSBOBAH4kAcIA7EgTgQB+JAHIgDcSAOxIE4QByIA3EgDsSBOBAH4kAciAPEgTgQB+JAHIgDcSAONueh6Oifz+/7Cx9fnkpv1U6InePpcq6+mYqbtBNoZ+hyS47Z5DELZ46ciZwk7ZTu3By2eEDfnZrnHPyDyUfremFRi+07qTNHxY9FZq12JndKn0/80c7yc47qv/nNde3E2vE+R5jfJhVH9tqZjaMlw/GCnVg7zhyxTxvp43vtiINDza8VEAfiQBxxlb7cmDu+104qjopPhycX7MTaceYIf/JIH9lrJxVHS4zj69qJtTPmI/vV7SQe5sXDeu1c+ch+pb9f2j8Bbt/J+ppg5uLimc1OrJ2hy4pjNnlM7heME0n6lvZWd8riYFe8z4E4EAfiQByIA3EgDsSBOBAHiANxIA7EgTgQB0EUf/v84/lt/MfXr/e6G7az/p2h5ZYmL7GzmZ2C75Amdot6XOfOzVUmL9zbztD+SBT1uM6d+zvresnOd4b2RyL6MXM/Rvn341Z3vFpBHIgDcbCaOHJe+cQ9Zu6pWf6rvq3u5J450lv5r7/XuTP3ZtHOd8r+IfVkjBXv7NoJsVP2nGPuTZVSdkLs+C8Y8GoFcSAOxIE4EAfiQByIA3GAOBAH4kAciANxIA7EgTgQB4gDcSAOxIE4EAfiQByIA3GAOBAH4kAciANxIA7EgTgQB+IAcSAOxIE4EAfiQByIA3EgDhAH4kAciANxIA7EgTgQB+IAcSAOxEFXvzxdUixD1kbyAAAAAElFTkSuQmCC">
+<link rel="icon" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAALQAAAC0CAIAAACyr5FlAAACoElEQVR42u3cu1HjYBiGUVtDXY7J3AAdeMggJCKEjBYogvIInGhs6dd/g9EnnZOtR349az8I33aPp8v5AFMGdwHiQByIA3EgDsSBOBAH4kAcIA7EgTgQB+JAHIgDcSAOxAHiQByIA3EgDsSBOBAH4kAcIA7EgTgQB+JAHIgDcSAOxIE4QByIA3EgDsSBOBAH4kAciAPEgTgQB+JAHIgDcSAONueh6Oifz+/7Cx9fnkpv1U6InePpcq6+mYqbtBNoZ+hyS47Z5DELZ46ciZwk7ZTu3By2eEDfnZrnHPyDyUfremFRi+07qTNHxY9FZq12JndKn0/80c7yc47qv/nNde3E2vE+R5jfJhVH9tqZjaMlw/GCnVg7zhyxTxvp43vtiINDza8VEAfiQBxxlb7cmDu+104qjopPhycX7MTaceYIf/JIH9lrJxVHS4zj69qJtTPmI/vV7SQe5sXDeu1c+ch+pb9f2j8Bbt/J+ppg5uLimc1OrJ2hy4pjNnlM7heME0n6lvZWd8riYFe8z4E4EAfiQByIA3EgDsSBOBAHiANxIA7EgTgQB0EUf/v84/lt/MfXr/e6G7az/p2h5ZYmL7GzmZ2C75Amdot6XOfOzVUmL9zbztD+SBT1uM6d+zvresnOd4b2RyL6MXM/Rvn341Z3vFpBHIgDcbCaOHJe+cQ9Zu6pWf6rvq3u5J450lv5r7/XuTP3ZtHOd8r+IfVkjBXv7NoJsVP2nGPuTZVSdkLs+C8Y8GoFcSAOxIE4EAfiQByIA3GAOBAH4kAciANxIA7EgTgQB4gDcSAOxIE4EAfiQByIA3GAOBAH4kAciANxIA7EgTgQB+IAcSAOxIE4EAfiQByIA3EgDhAH4kAciANxIA7EgTgQB+IAcSAOxEFXvzxdUixD1kbyAAAAAElFTkSuQmCC">
+<style>
+:root{
+  --bg:#F6F7F3; --card:#FFFFFF; --ink:#232B22; --sub:#71806F; --line:#E3E7DE;
+  --dim:#C3CCC0; --pine:#3E6B4F; --pinesoft:#E7F0E8; --indigo:#43507A;
+  --indigosoft:#E9ECF5; --sienna:#A9663B; --siennasoft:#F4EAE0; --navbg:#FBFCF9;
+}
+*{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0}
+body{background:var(--bg);color:var(--ink);
+  font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",sans-serif;
+  font-size:15px;line-height:1.5}
+button{font:inherit;color:inherit;background:none;border:none;padding:0;cursor:pointer}
+input,select,textarea{font:inherit;color:var(--ink)}
+.mono{font-family:ui-monospace,"SF Mono",SFMono-Regular,Menlo,monospace;font-variant-numeric:tabular-nums}
+#wrap{max-width:448px;margin:0 auto;padding:16px 16px calc(96px + env(safe-area-inset-bottom))}
+header{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px}
+.title{display:flex;align-items:baseline;gap:8px}
+h1{font-size:18px;font-weight:700;letter-spacing:.04em;margin:0}
+.eyebrow{font-size:9px;letter-spacing:2px;color:var(--dim)}
+#saveState{font-size:12px;color:var(--sub)}
+.banner{border:1px solid var(--line);border-radius:12px;padding:8px 12px;margin-bottom:12px;font-size:12px;line-height:1.6}
+.banner.err{background:var(--siennasoft);color:var(--sienna)}
+.banner.info{background:var(--indigosoft);color:var(--indigo)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:12px 16px 4px;margin-bottom:12px}
+.card>.chead{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px}
+.ctitle{font-size:11px;font-weight:700;letter-spacing:.06em;color:var(--sub)}
+.cright{font-size:11px;color:var(--sub)}
+.row{padding:12px 0;border-bottom:1px solid var(--line)}
+.row:last-child{border-bottom:none}
+.rowhead{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:8px}
+.lbl{font-size:14px;font-weight:600}
+.sub{font-size:11px;color:var(--sub)}
+.seg{display:grid;gap:4px}
+.sb{padding:9px 2px;border:1px solid var(--line);border-radius:10px;background:var(--card);
+  font-size:12px;font-weight:500;text-align:center;transition:background .12s}
+.sb.on{color:#fff;border-color:transparent}
+.on-pine{background:var(--pine)} .on-indigo{background:var(--indigo)}
+.on-sienna{background:var(--sienna)} .on-gray{background:#8A9388}
+.wv{margin-top:8px;width:100%;border:1px solid var(--line);background:var(--bg);
+  border-radius:10px;padding:8px 12px;font-size:14px}
+.datebar{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.navbtn{padding:8px 12px;border:1px solid var(--line);border-radius:10px;background:var(--card);font-size:15px}
+.navbtn:disabled{color:var(--dim)}
+.datec{text-align:center}
+.dateT{font-size:16px;font-weight:700}
+.dateS{font-size:12px;color:var(--sub)}
+.hintbtn{width:100%;padding:9px;border:1px solid var(--line);border-radius:12px;
+  background:var(--indigosoft);color:var(--indigo);font-size:13px;font-weight:500;margin-bottom:12px}
+.foot{font-size:11px;color:var(--sub);padding:0 4px 8px;line-height:1.6}
+.wrow{display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-top:1px solid var(--line)}
+.wname{display:flex;align-items:baseline;gap:8px;min-width:0}
+.wl{font-size:14px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wc{font-size:12px}
+.dots{display:flex;gap:4px}
+.dot{width:14px;height:14px;border-radius:7px;display:inline-block}
+.dot.ok{background:var(--pine)} .dot.ng{background:var(--dim)}
+.dot.miss{border:1.5px solid var(--dim);background:transparent}
+.dot.fut{background:var(--bg)}
+.dhead{display:flex;justify-content:flex-end;gap:4px;margin:4px 0 2px}
+.dh{width:14px;text-align:center;font-size:9px;color:var(--sub)}
+.chips{display:flex;flex-wrap:wrap;gap:8px;padding:8px 0}
+.chip{border:1px solid var(--line);border-radius:10px;padding:4px 8px;font-size:12px;background:var(--bg);color:var(--sub)}
+.chip.hit{background:var(--pinesoft);color:var(--pine)}
+.bigbtn{width:100%;padding:12px;border-radius:12px;background:var(--pine);color:#fff;
+  font-size:14px;font-weight:600;margin-bottom:8px}
+.ghost{width:100%;padding:9px;border:1px solid var(--line);border-radius:10px;
+  background:var(--bg);font-size:13px;font-weight:500}
+.half{display:flex;gap:8px;padding:8px 0}
+.half>*{flex:1}
+textarea{width:100%;border:1px solid var(--line);background:var(--bg);border-radius:10px;
+  padding:8px;font-size:11px;line-height:1.5}
+.stp{display:flex;align-items:center;gap:8px}
+.stpb{width:32px;height:32px;border:1px solid var(--line);border-radius:10px;background:var(--bg);
+  font-size:16px;font-weight:700}
+.stpv{width:34px;text-align:center;font-size:13px}
+.sw{width:44px;height:26px;border-radius:13px;background:var(--dim);position:relative;transition:background .15s;flex:none}
+.sw.on{background:var(--pine)}
+.knob{position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:10px;background:#fff;transition:left .15s}
+.sw.on .knob{left:21px}
+.srow{display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-top:1px solid var(--line)}
+select{border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:6px 8px;font-size:13px}
+.addrow{display:flex;gap:8px;padding:8px 0;border-top:1px solid var(--line)}
+.addrow input{flex:1;border:1px solid var(--line);background:var(--bg);border-radius:10px;padding:8px 12px;font-size:13px}
+.addbtn{padding:0 14px;border-radius:10px;background:var(--pine);color:#fff;font-size:13px;font-weight:500}
+.delbtn{padding:6px 10px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--sienna);font-size:12px}
+.danger{color:var(--sienna);background:var(--siennasoft);border:1px solid var(--line);
+  padding:8px 12px;border-radius:10px;font-size:13px;font-weight:500}
+.danger.armed{background:var(--sienna);color:#fff;font-weight:700}
+.note{font-size:11px;margin:4px 0}
+nav{position:fixed;left:0;right:0;bottom:0;background:var(--navbg);border-top:1px solid var(--line);
+  padding-bottom:env(safe-area-inset-bottom)}
+.navin{max-width:448px;margin:0 auto;display:flex}
+.tb{flex:1;padding:10px 0 12px;text-align:center;font-size:12px;color:var(--sub);position:relative}
+.tb.on{color:var(--pine);font-weight:700}
+.tb.on::before{content:"";position:absolute;top:0;left:30%;right:30%;height:2px;background:var(--pine);border-radius:1px}
+.chartbox{padding:6px 0 10px}
+svg{display:block}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <header>
+    <div class="title"><h1>繁栄ログ</h1><span class="eyebrow mono">MORNING&nbsp;LOG&nbsp;·&nbsp;v2.0</span></div>
+    <span id="saveState"></span>
+  </header>
+  <div id="view"></div>
+</div>
+<nav><div class="navin" id="nav"></div></nav>
+
+<script>
+"use strict";
+/* ================= 定数 ================= */
+var KEY = "flourish-log-v2";
+var BEDTIME_OPTS = ["〜23:00","〜23:30","〜24:00","〜24:30","以降"];
+var BEDTIME_VAL  = [23, 23.5, 24, 24.5, 25.2];
+var SLEEP_OPTS   = ["良","普通","悪"];
+var YT_OPTS      = ["<30分","〜1h","〜2h","2h超"];
+var WDAY = ["月","火","水","木","金","土","日"];
+var CORE = [
+  {id:"bedtime", label:"就寝時刻"},
+  {id:"youtube", label:"YouTube"},
+  {id:"ashwagandha", label:"アシュワガンダ"},
+  {id:"creatine", label:"クレアチン"},
+  {id:"weight", label:"体重測定"},
+  {id:"gym", label:"ジム"},
+  {id:"study", label:"勉強"},
+];
+
+/* ================= 日付 ================= */
+function pad(n){ return String(n).padStart(2,"0"); }
+function fmt(d){ return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate()); }
+function parseD(s){ var a=s.split("-"); return new Date(+a[0], +a[1]-1, +a[2]); }
+function addDays(d,n){ var x=new Date(d); x.setDate(x.getDate()+n); return x; }
+function monIdx(d){ return (d.getDay()+6)%7; }
+function weekStart(d){ return addDays(d, -monIdx(d)); }
+function md(s){ return (+s.slice(5,7))+"/"+(+s.slice(8,10)); }
+
+/* ================= データ ================= */
+function defaultData(){
+  return {
+    version: 2,
+    targets: {bedtime:5, youtube:5, ashwagandha:6, creatine:6, weight:5, gym:3, study:5},
+    th: {bedtime:2, youtube:1},
+    enabled: {bedtime:true, sleepFeel:true, youtube:true, ashwagandha:true, creatine:true, weight:true, gym:true, study:true},
+    custom: [],
+    entries: {},
+  };
+}
+function migrate(d){
+  var b = defaultData();
+  var o = Object.assign({}, b, d || {});
+  o.targets = Object.assign({}, b.targets, (d && d.targets) || {});
+  o.th = Object.assign({}, b.th, (d && d.th) || {});
+  o.enabled = Object.assign({}, b.enabled, (d && d.enabled) || {});
+  o.custom = (d && Array.isArray(d.custom)) ? d.custom : [];
+  o.entries = (d && d.entries) || {};
+  return o;
+}
+function achieved(data, e, id){
+  if (!e) return null;
+  if (id === "bedtime") return e.bedtime == null ? null : e.bedtime <= data.th.bedtime;
+  if (id === "youtube") return e.youtube == null ? null : e.youtube <= data.th.youtube;
+  var v = e[id];
+  return v == null ? null : v === true;
+}
+function allItems(data){
+  return CORE.map(function(c){ return {id:c.id, label:c.label, tgt:data.targets[c.id]}; })
+    .concat(data.custom.map(function(c){ return {id:c.id, label:c.label, tgt:c.target}; }));
+}
+function phi(pairs){
+  var a=0,b=0,c=0,d=0;
+  pairs.forEach(function(p){
+    if (p[0] && p[1]) a++; else if (p[0] && !p[1]) b++;
+    else if (!p[0] && p[1]) c++; else d++;
+  });
+  var den = Math.sqrt((a+b)*(c+d)*(a+c)*(b+d));
+  return den === 0 ? 0 : (a*d - b*c)/den;
+}
+function weekStats(data, ws, today){
+  var days=[]; for (var i=0;i<7;i++) days.push(fmt(addDays(ws,i)));
+  var items = allItems(data).filter(function(it){ return data.enabled[it.id] !== false; });
+  var per = items.map(function(it){
+    var ok=0, ent=0;
+    days.forEach(function(dt){
+      if (dt > today) return;
+      var a = achieved(data, data.entries[dt], it.id);
+      if (a !== null) ent++;
+      if (a === true) ok++;
+    });
+    return {label:it.label, ok:ok, target:it.tgt, entered:ent};
+  });
+  function dist(f,n){
+    var arr=[]; for (var k=0;k<n;k++) arr.push(0);
+    days.forEach(function(dt){
+      var v=(data.entries[dt]||{})[f];
+      if (v!=null && v>=0 && v<n) arr[v]++;
+    });
+    return arr;
+  }
+  var logged = days.filter(function(dt){ return dt<=today && data.entries[dt]; }).length;
+  return {range: md(days[0])+"–"+md(days[6]), logged:logged, items:per,
+    bedtime:dist("bedtime",5), sleepFeel:dist("sleepFeel",3), youtube:dist("youtube",4)};
+}
+function buildCSV(data){
+  var cols=["date","就寝時刻","眠れた感","YouTube","アシュワガンダ","クレアチン","体重測定","体重","ジム","勉強"]
+    .concat(data.custom.map(function(c){return c.label;}));
+  function b(v){ return v==null ? "" : v===true ? 1 : v===false ? 0 : v; }
+  var lines=[cols.join(",")];
+  Object.keys(data.entries).sort().forEach(function(dt){
+    var e=data.entries[dt];
+    var row=[dt,
+      e.bedtime!=null?BEDTIME_OPTS[e.bedtime]:"",
+      e.sleepFeel!=null?SLEEP_OPTS[e.sleepFeel]:"",
+      e.youtube!=null?YT_OPTS[e.youtube]:"",
+      b(e.ashwagandha), b(e.creatine), b(e.weight), e.weightVal!=null?e.weightVal:"", b(e.gym), b(e.study)]
+      .concat(data.custom.map(function(c){return b(e[c.id]);}));
+    lines.push(row.join(","));
+  });
+  return lines.join("\n");
+}
+function buildReviewText(data, today){
+  var ws = weekStart(parseD(today));
+  var s = weekStats(data, ws, today);
+  var p = weekStats(data, addDays(ws,-7), today);
+  return "【繁栄ログ 週報データ " + s.range + "】\n"
+    + "以下のデータで週次レビューを書いてください。形式: 【事実】3行以内 / 【解釈】2行以内(推測と明示) / 【来週の一点】1つだけ具体的に。責めない・説教しない・淡々と。環境設計(摩擦の調整)の観点で提案。\n"
+    + "凡例: bedtime=[〜23:00,〜23:30,〜24:00,〜24:30,以降] sleepFeel=[良,普通,悪] youtube=[<30分,〜1h,〜2h,2h超]\n"
+    + "今週: " + JSON.stringify(s) + "\n前週: " + JSON.stringify(p);
+}
+
+/* ================= 状態 ================= */
+function load(){
+  try {
+    var t = localStorage.getItem(KEY);
+    if (t) return migrate(JSON.parse(t));
+  } catch(e) {}
+  return defaultData();
+}
+var S = load();
+var tab = "log";
+var sel = fmt(new Date());
+var expText = null, expNote = "", revText = null, revNote = "", setNote = "", armed = false, armTimer = null;
+var saveTimer = null;
+
+function esc(s){
+  return String(s).replace(/[&<>"']/g, function(c){
+    return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];
+  });
+}
+function save(){
+  try {
+    localStorage.setItem(KEY, JSON.stringify(S));
+    flash("✓ 保存済み", false);
+  } catch(e) {
+    flash("保存エラー: " + (e && e.message || e), true);
+  }
+}
+function flash(msg, isErr){
+  var el = document.getElementById("saveState");
+  el.textContent = msg;
+  el.style.color = isErr ? "var(--sienna)" : "var(--sub)";
+  clearTimeout(saveTimer);
+  if (!isErr) saveTimer = setTimeout(function(){ el.textContent=""; }, 1500);
+}
+function copyText(t){
+  try { navigator.clipboard.writeText(t); return true; } catch(e){ return false; }
+}
+
+/* ================= 部品HTML ================= */
+function seg(f, opts, val, colors){
+  var h = '<div class="seg" style="grid-template-columns:repeat('+opts.length+',1fr)">';
+  opts.forEach(function(o,i){
+    var on = val === i;
+    h += '<button class="sb'+(on?' on '+colors[i]:'')+'" data-f="'+f+'" data-v="'+i+'" aria-pressed="'+on+'">'+esc(o)+'</button>';
+  });
+  return h + '</div>';
+}
+function pairBtn(f, val){
+  function b(v, lab){
+    var on = val === (v==="t");
+    var cls = v==="t" ? "on-pine" : "on-gray";
+    return '<button class="sb'+(on?' on '+cls:'')+'" data-f="'+f+'" data-v="'+v+'" aria-pressed="'+on+'">'+lab+'</button>';
+  }
+  return '<div class="seg" style="grid-template-columns:1fr 1fr">'+b("t","✓ した")+b("f","✗ しなかった")+'</div>';
+}
+function row(label, sub, inner){
+  return '<div class="row"><div class="rowhead"><span class="lbl">'+esc(label)+'</span>'
+    + (sub ? '<span class="sub">'+esc(sub)+'</span>' : '') + '</div>' + inner + '</div>';
+}
+
+/* ================= 記録 ================= */
+function viewLog(today){
+  var e = S.entries[sel] || {};
+  var d = parseD(sel);
+  var minD = fmt(addDays(parseD(today), -7));
+  var en = S.enabled;
+  var fields = [];
+  if (en.bedtime) fields.push(e.bedtime!=null);
+  if (en.sleepFeel) fields.push(e.sleepFeel!=null);
+  if (en.youtube) fields.push(e.youtube!=null);
+  if (en.ashwagandha) fields.push(e.ashwagandha!=null);
+  if (en.creatine) fields.push(e.creatine!=null);
+  if (en.weight) fields.push(e.weight!=null);
+  if (en.gym) fields.push(e.gym!=null);
+  if (en.study) fields.push(e.study!=null);
+  S.custom.forEach(function(c){ fields.push(e[c.id]!=null); });
+  var done = fields.filter(Boolean).length;
+
+  var h = '<div class="datebar">'
+    + '<button class="navbtn" data-dn="-1"'+(sel<=minD?' disabled':'')+'>‹</button>'
+    + '<div class="datec"><div class="dateT">'+md(sel)+'('+WDAY[monIdx(d)]+')'+(sel===today?' ・今日':'')+'</div>'
+    + '<div class="dateS mono">'+done+'/'+fields.length+' 入力</div></div>'
+    + '<button class="navbtn" data-dn="1"'+(sel>=today?' disabled':'')+'>›</button></div>';
+
+  if (sel===today && monIdx(parseD(today))===6) {
+    h += '<button class="hintbtn" data-nav="review">日曜です — 週報タブでデータをコピーしてClaudeへ</button>';
+  }
+
+  var night = '';
+  if (en.bedtime) night += row("就寝時刻","布団に入った時刻",
+    seg("bedtime", BEDTIME_OPTS, e.bedtime!=null?e.bedtime:null, ["on-indigo","on-indigo","on-indigo","on-indigo","on-sienna"]));
+  if (en.ashwagandha) night += row("アシュワガンダ","", pairBtn("ashwagandha", e.ashwagandha!=null?e.ashwagandha:null));
+  h += '<div class="card"><div class="chead"><span class="ctitle">昨夜</span></div>'+night+'</div>';
+
+  var morn = '';
+  if (en.sleepFeel) morn += row("眠れた感","主観でOK",
+    seg("sleepFeel", SLEEP_OPTS, e.sleepFeel!=null?e.sleepFeel:null, ["on-pine","on-gray","on-sienna"]));
+  if (en.creatine) morn += row("クレアチン","コーヒーの横に", pairBtn("creatine", e.creatine!=null?e.creatine:null));
+  if (en.weight) {
+    var winner = pairBtn("weight", e.weight!=null?e.weight:null);
+    if (e.weight === true) {
+      winner += '<input class="wv mono" id="wv" inputmode="decimal" placeholder="数値(任意) 例 68.5" value="'+esc(e.weightVal!=null?e.weightVal:"")+'">';
+    }
+    morn += row("体重測定","", winner);
+  }
+  h += '<div class="card"><div class="chead"><span class="ctitle">今朝</span></div>'+morn+'</div>';
+
+  var y = '';
+  if (en.youtube) y += row("YouTube","スクリーンタイムを転記",
+    seg("youtube", YT_OPTS, e.youtube!=null?e.youtube:null, ["on-pine","on-pine","on-sienna","on-sienna"]));
+  if (en.gym) y += row("ジム","", pairBtn("gym", e.gym!=null?e.gym:null));
+  if (en.study) y += row("勉強","15分以上で達成", pairBtn("study", e.study!=null?e.study:null));
+  S.custom.forEach(function(c){ y += row(c.label,"", pairBtn(c.id, e[c.id]!=null?e[c.id]:null)); });
+  h += '<div class="card"><div class="chead"><span class="ctitle">昨日</span></div>'+y+'</div>';
+
+  h += '<p class="foot">欠損は失敗ではありません。1日抜けても習慣形成には実質影響しない、が実証の示すところです。</p>';
+  return h;
+}
+
+/* ================= 週 ================= */
+function viewWeek(today){
+  var ws = weekStart(parseD(today));
+  var days=[]; for (var i=0;i<7;i++) days.push(fmt(addDays(ws,i)));
+  var logged = days.filter(function(dt){ return dt<=today && S.entries[dt]; }).length;
+  var passed = days.filter(function(dt){ return dt<=today; }).length;
+  var items = allItems(S).filter(function(it){ return S.enabled[it.id] !== false; });
+
+  var h = '<div class="card"><div class="chead"><span class="ctitle">今週 '+md(days[0])+' – '+md(days[6])+'</span>'
+    + '<span class="cright mono">入力 '+logged+'/'+passed+'日</span></div>';
+  h += '<div class="dhead">'+WDAY.map(function(w){return '<span class="dh">'+w+'</span>';}).join("")+'</div>';
+
+  items.forEach(function(it){
+    var ok=0, dots='';
+    days.forEach(function(dt){
+      var st;
+      if (dt > today) st = "fut";
+      else {
+        var a = achieved(S, S.entries[dt], it.id);
+        if (a === null) st = "miss"; else if (a) { st = "ok"; ok++; } else st = "ng";
+      }
+      dots += '<span class="dot '+st+'"></span>';
+    });
+    var hit = ok >= it.tgt;
+    h += '<div class="wrow"><div class="wname"><span class="wl">'+esc(it.label)+'</span>'
+      + '<span class="wc mono" style="color:'+(hit?'var(--pine)':'var(--sub)')+'">'+ok+'/'+it.tgt+'</span></div>'
+      + '<div class="dots">'+dots+'</div></div>';
+  });
+
+  if (S.enabled.sleepFeel) {
+    var fd='';
+    days.forEach(function(dt){
+      if (dt > today) { fd += '<span class="dot fut"></span>'; return; }
+      var v = (S.entries[dt]||{}).sleepFeel;
+      if (v == null) { fd += '<span class="dot miss"></span>'; return; }
+      var col = v===0 ? 'var(--pine)' : v===1 ? '#8A9388' : 'var(--sienna)';
+      fd += '<span class="dot" style="background:'+col+'"></span>';
+    });
+    h += '<div class="wrow"><div class="wname"><span class="wl">眠れた感</span><span class="wc" style="color:var(--sub)">計測のみ</span></div>'
+      + '<div class="dots">'+fd+'</div></div>';
+  }
+  h += '</div><p class="foot">主指標は週次達成率です。連続日数は表示しません(断絶時の全崩れを防ぐため)。</p>';
+  return h;
+}
+
+/* ================= 推移(SVGチャート) ================= */
+function svgChart(rows, key, yMin, yMax, yTicks, refY, color){
+  var W=320, H=150, L=44, R=8, T=8, B=20;
+  var iw = W-L-R, ih = H-T-B;
+  function X(i){ return L + (rows.length<=1 ? 0 : i/(rows.length-1)*iw); }
+  function Y(v){ return T + (1-(v-yMin)/(yMax-yMin))*ih; }
+  var h = '<svg viewBox="0 0 '+W+' '+H+'" width="100%">';
+  yTicks.forEach(function(t){
+    h += '<line x1="'+L+'" y1="'+Y(t.v)+'" x2="'+(W-R)+'" y2="'+Y(t.v)+'" stroke="#E3E7DE" stroke-width="1"/>';
+    h += '<text x="'+(L-6)+'" y="'+(Y(t.v)+3)+'" font-size="9" fill="#71806F" text-anchor="end">'+t.l+'</text>';
+  });
+  if (refY != null) h += '<line x1="'+L+'" y1="'+Y(refY)+'" x2="'+(W-R)+'" y2="'+Y(refY)+'" stroke="#3E6B4F" stroke-width="1.5" stroke-dasharray="4 4"/>';
+  rows.forEach(function(r,i){
+    if (i % 7 === 0 || i === rows.length-1) {
+      h += '<text x="'+X(i)+'" y="'+(H-6)+'" font-size="9" fill="#71806F" text-anchor="middle">'+r.d+'</text>';
+    }
+  });
+  var path='', pen=false;
+  rows.forEach(function(r,i){
+    var v = r[key];
+    if (v == null) { pen=false; return; }
+    path += (pen ? ' L ' : ' M ') + X(i).toFixed(1) + ' ' + Y(v).toFixed(1);
+    pen = true;
+  });
+  if (path) h += '<path d="'+path+'" fill="none" stroke="'+color+'" stroke-width="2"/>';
+  rows.forEach(function(r,i){
+    var v = r[key];
+    if (v == null) return;
+    h += '<circle cx="'+X(i).toFixed(1)+'" cy="'+Y(v).toFixed(1)+'" r="2.5" fill="'+color+'"/>';
+  });
+  return h + '</svg>';
+}
+function viewTrend(today){
+  var rows=[];
+  for (var i=27;i>=0;i--){
+    var dt = fmt(addDays(parseD(today), -i));
+    var e = S.entries[dt] || {};
+    rows.push({d: md(dt),
+      bed: e.bedtime!=null ? BEDTIME_VAL[e.bedtime] : null,
+      yt: e.youtube!=null ? e.youtube : null,
+      w: (e.weightVal!=null && e.weightVal!=="") ? Number(e.weightVal) : null});
+  }
+  var bedT=[{v:23,l:"23:00"},{v:23.5,l:"23:30"},{v:24,l:"24:00"},{v:24.5,l:"24:30"},{v:25.2,l:"以降"}];
+  var ytT=YT_OPTS.map(function(o,i){return {v:i,l:o};});
+  var h = '<div class="card"><div class="chead"><span class="ctitle">就寝時刻(28日)</span></div><div class="chartbox">'
+    + svgChart(rows,"bed",22.8,25.4,bedT,BEDTIME_VAL[S.th.bedtime],"#43507A") + '</div></div>';
+  h += '<div class="card"><div class="chead"><span class="ctitle">YouTube(28日)</span></div><div class="chartbox">'
+    + svgChart(rows,"yt",-0.2,3.2,ytT,S.th.youtube,"#A9663B") + '</div></div>';
+  var ws = rows.filter(function(r){return r.w!=null;}).map(function(r){return r.w;});
+  if (ws.length) {
+    var mn=Math.min.apply(null,ws)-0.5, mx=Math.max.apply(null,ws)+0.5;
+    var wt=[{v:mn+0.5,l:(mn+0.5).toFixed(1)},{v:(mn+mx)/2,l:((mn+mx)/2).toFixed(1)},{v:mx-0.5,l:(mx-0.5).toFixed(1)}];
+    h += '<div class="card"><div class="chead"><span class="ctitle">体重(28日)</span></div><div class="chartbox">'
+      + svgChart(rows,"w",mn,mx,wt,null,"#3E6B4F") + '</div></div>';
+  } else {
+    h += '<p class="foot">体重の数値を入力すると、ここに推移が表示されます。</p>';
+  }
+  return h;
+}
+
+/* ================= 週報 ================= */
+function viewReview(today){
+  var stats = weekStats(S, weekStart(parseD(today)), today);
+  var h = '<div class="card"><div class="chead"><span class="ctitle">今週のサマリー '+stats.range+'</span></div><div class="chips">';
+  stats.items.forEach(function(it){
+    h += '<span class="chip mono'+(it.ok>=it.target?' hit':'')+'">'+esc(it.label)+' '+it.ok+'/'+it.target+'</span>';
+  });
+  h += '</div></div>';
+  h += '<button class="bigbtn" data-action="copyreview"'+(stats.logged===0?' disabled style="background:var(--dim)"':'')+'>週報用データをコピー</button>';
+  h += '<p class="foot">コピーしてClaudeのチャット(このプロジェクト)に貼り付けると、【事実】【解釈】【来週の一点】形式の週次レビューが返ってきます。</p>';
+  if (revText != null) {
+    h += '<p class="note" style="color:'+(revNote.indexOf("しました")>=0?'var(--pine)':'var(--sub)')+'">'+esc(revNote)+'</p>';
+    h += '<textarea readonly rows="5" id="revout">'+esc(revText)+'</textarea>';
+  }
+
+  var n = Object.keys(S.entries).length;
+  h += '<div class="card"><div class="chead"><span class="ctitle">相関ヒント</span></div>';
+  if (n < 28) {
+    h += '<p style="font-size:13px;color:var(--sub);padding:10px 0">🔒 28日分の記録で解禁(現在 <span class="mono">'+n+'/28</span>)。少ないデータの相関はノイズです。</p>';
+  } else {
+    var es = Object.keys(S.entries).map(function(k){ return S.entries[k]; });
+    function mk(fa, fb){
+      var ps=[];
+      es.forEach(function(e){
+        var x=fa(e), y=fb(e);
+        if (x!=null && y!=null) ps.push([x,y]);
+      });
+      return ps;
+    }
+    var defs=[
+      {l:"就寝が達成ライン内 × 眠れた感「良」", ps:mk(function(e){return e.bedtime==null?null:e.bedtime<=S.th.bedtime;}, function(e){return e.sleepFeel==null?null:e.sleepFeel===0;})},
+      {l:"YouTube多め(〜2h以上) × 就寝が遅い", ps:mk(function(e){return e.youtube==null?null:e.youtube>=2;}, function(e){return e.bedtime==null?null:e.bedtime>S.th.bedtime;})},
+      {l:"ジムをした × 眠れた感「良」", ps:mk(function(e){return e.gym==null?null:e.gym===true;}, function(e){return e.sleepFeel==null?null:e.sleepFeel===0;})},
+      {l:"勉強した × YouTube多め", ps:mk(function(e){return e.study==null?null:e.study===true;}, function(e){return e.youtube==null?null:e.youtube>=2;})},
+    ];
+    var res = defs.filter(function(x){return x.ps.length>=14;})
+      .map(function(x){return {l:x.l, n:x.ps.length, v:phi(x.ps)};})
+      .sort(function(a,b){return Math.abs(b.v)-Math.abs(a.v);});
+    if (!res.length) h += '<p style="font-size:13px;color:var(--sub);padding:10px 0">両項目が揃った日がまだ少なく、計算できるペアがありません。</p>';
+    else {
+      res.forEach(function(x){
+        h += '<div class="row"><div style="font-size:13px">'+esc(x.l)+'</div>'
+          + '<div class="sub mono">φ='+x.v.toFixed(2)+'('+(x.v>0.1?'正':x.v<-0.1?'負':'ほぼ無')+') n='+x.n+'</div></div>';
+      });
+      h += '<p class="foot">相関であって因果ではありません。nも小さいため参考程度に。</p>';
+    }
+  }
+  h += '</div>';
+  return h;
+}
+
+/* ================= 設定 ================= */
+function viewSettings(){
+  var h = '<div class="card"><div class="chead"><span class="ctitle">週の目標</span></div>';
+  CORE.forEach(function(c){
+    h += '<div class="srow"><span style="font-size:14px">'+esc(c.label)+'</span>'
+      + '<div class="stp"><button class="stpb" data-tgt="'+c.id+'" data-d="-1">−</button>'
+      + '<span class="stpv mono">'+S.targets[c.id]+'/7</span>'
+      + '<button class="stpb" data-tgt="'+c.id+'" data-d="1">＋</button></div></div>';
+  });
+  S.custom.forEach(function(c){
+    h += '<div class="srow"><span style="font-size:14px">'+esc(c.label)+'</span>'
+      + '<div class="stp"><button class="stpb" data-tgt="'+c.id+'" data-d="-1">−</button>'
+      + '<span class="stpv mono">'+c.target+'/7</span>'
+      + '<button class="stpb" data-tgt="'+c.id+'" data-d="1">＋</button></div></div>';
+  });
+  h += '</div>';
+
+  h += '<div class="card"><div class="chead"><span class="ctitle">達成ライン</span></div>';
+  h += '<div class="srow"><span style="font-size:14px">就寝時刻</span><select data-th="bedtime">';
+  BEDTIME_OPTS.slice(0,4).forEach(function(o,i){ h += '<option value="'+i+'"'+(S.th.bedtime===i?' selected':'')+'>'+esc(o)+' 以内</option>'; });
+  h += '</select></div>';
+  h += '<div class="srow"><span style="font-size:14px">YouTube</span><select data-th="youtube">';
+  YT_OPTS.slice(0,3).forEach(function(o,i){ h += '<option value="'+i+'"'+(S.th.youtube===i?' selected':'')+'>'+esc(o)+' 以内</option>'; });
+  h += '</select></div></div>';
+
+  h += '<div class="card"><div class="chead"><span class="ctitle">表示する項目</span></div>';
+  var togs=[["bedtime","就寝時刻"],["sleepFeel","眠れた感"],["youtube","YouTube"],["ashwagandha","アシュワガンダ"],["creatine","クレアチン"],["weight","体重測定"],["gym","ジム"],["study","勉強"]];
+  togs.forEach(function(t){
+    var on = S.enabled[t[0]] !== false;
+    h += '<div class="srow"><span style="font-size:14px">'+t[1]+'</span>'
+      + '<button class="sw'+(on?' on':'')+'" data-tog="'+t[0]+'" aria-pressed="'+on+'"><span class="knob"></span></button></div>';
+  });
+  h += '</div>';
+
+  h += '<div class="card"><div class="chead"><span class="ctitle">カスタム項目(チェック式)</span></div>';
+  S.custom.forEach(function(c){
+    h += '<div class="srow"><span style="font-size:14px">'+esc(c.label)+'</span>'
+      + '<button class="delbtn" data-del="'+c.id+'">削除</button></div>';
+  });
+  h += '<div class="addrow"><input id="newLabel" placeholder="例: 読書">'
+    + '<button class="addbtn" data-action="addcustom">追加</button></div></div>';
+
+  h += '<div class="card"><div class="chead"><span class="ctitle">データ</span>'
+    + '<span class="cright mono">'+Object.keys(S.entries).length+'日分</span></div>';
+  h += '<div class="half"><button class="ghost" data-action="expcsv">CSVをコピー</button>'
+    + '<button class="ghost" data-action="expjson">JSONをコピー</button></div>';
+  if (expText != null) {
+    h += '<p class="note" style="color:'+(expNote.indexOf("しました")>=0?'var(--pine)':'var(--sub)')+'">'+esc(expNote)+'</p>';
+    h += '<textarea readonly rows="4" id="exp" class="mono">'+esc(expText)+'</textarea>';
+  }
+  h += '<div style="padding:8px 0 4px"><p class="note" style="color:var(--sub)">復元/移行: JSONを下に貼り付けて取り込み</p>'
+    + '<textarea rows="3" id="imp" class="mono" placeholder="ここにJSONを貼り付け"></textarea>'
+    + '<button class="ghost" style="margin-top:6px" data-action="import">取り込む</button>';
+  if (setNote) h += '<p class="note" style="color:'+(setNote.indexOf("完了")>=0?'var(--pine)':'var(--sienna)')+'">'+esc(setNote)+'</p>';
+  h += '</div></div>';
+
+  h += '<div class="card"><div class="chead"><span class="ctitle">初期化</span></div><div style="padding:8px 0">';
+  h += armed
+    ? '<button class="danger armed" data-action="reset2">本当に削除する(取り消せません)</button>'
+    : '<button class="danger" data-action="reset1">すべてのデータを削除…</button>';
+  h += '</div></div>';
+
+  h += '<p class="foot">データはこの端末のブラウザ(このアプリ)内にのみ保存されます。バックアップはJSONコピーで。'
+    + 'このアプリの役割は計測と週次フィードバックまで — 行動を変えるのは環境設計の仕事です。 v2.0</p>';
+  return h;
+}
+
+/* ================= レンダリング ================= */
+var TABS=[["log","記録"],["week","週"],["trend","推移"],["review","週報"],["settings","設定"]];
+function render(){
+  var today = fmt(new Date());
+  var v = tab==="log" ? viewLog(today)
+    : tab==="week" ? viewWeek(today)
+    : tab==="trend" ? viewTrend(today)
+    : tab==="review" ? viewReview(today)
+    : viewSettings();
+  document.getElementById("view").innerHTML = v;
+  document.getElementById("nav").innerHTML = TABS.map(function(t){
+    return '<button class="tb'+(tab===t[0]?' on':'')+'" data-nav="'+t[0]+'">'+t[1]+'</button>';
+  }).join("");
+}
+
+/* ================= イベント ================= */
+document.addEventListener("click", function(ev){
+  var t = ev.target;
+
+  var nav = t.closest("[data-nav]");
+  if (nav) { tab = nav.dataset.nav; render(); return; }
+
+  var dn = t.closest("[data-dn]");
+  if (dn && !dn.disabled) {
+    var today = fmt(new Date());
+    var minD = fmt(addDays(parseD(today), -7));
+    var nx = fmt(addDays(parseD(sel), +dn.dataset.dn));
+    if (nx >= minD && nx <= today) { sel = nx; render(); }
+    return;
+  }
+
+  var sb = t.closest("[data-f]");
+  if (sb) {
+    var f = sb.dataset.f, raw = sb.dataset.v;
+    var v = raw==="t" ? true : raw==="f" ? false : parseInt(raw,10);
+    var e = Object.assign({}, S.entries[sel] || {});
+    if (e[f] === v) { delete e[f]; if (f==="weight") delete e.weightVal; }
+    else { e[f] = v; if (f==="weight" && v===false) delete e.weightVal; }
+    if (Object.keys(e).length === 0) delete S.entries[sel];
+    else S.entries[sel] = e;
+    save(); render(); return;
+  }
+
+  var tg = t.closest("[data-tgt]");
+  if (tg) {
+    var id = tg.dataset.tgt, d = +tg.dataset.d;
+    if (S.targets[id] != null) S.targets[id] = Math.min(7, Math.max(0, S.targets[id] + d));
+    else S.custom.forEach(function(c){ if (c.id===id) c.target = Math.min(7, Math.max(0, c.target + d)); });
+    save(); render(); return;
+  }
+
+  var tog = t.closest("[data-tog]");
+  if (tog) { S.enabled[tog.dataset.tog] = !(S.enabled[tog.dataset.tog] !== false); save(); render(); return; }
+
+  var del = t.closest("[data-del]");
+  if (del) {
+    S.custom = S.custom.filter(function(c){ return c.id !== del.dataset.del; });
+    save(); render(); return;
+  }
+
+  var ac = t.closest("[data-action]");
+  if (!ac) return;
+  var a = ac.dataset.action;
+
+  if (a === "addcustom") {
+    var inp = document.getElementById("newLabel");
+    var lab = (inp.value || "").trim();
+    if (!lab) return;
+    S.custom.push({id: "c_" + Date.now().toString(36), label: lab, target: 5});
+    save(); render(); return;
+  }
+  if (a === "expcsv" || a === "expjson") {
+    expText = a==="expcsv" ? buildCSV(S) : JSON.stringify(S, null, 2);
+    expNote = copyText(expText) ? "コピーしました" : "コピーできない場合は下を長押しして選択してください";
+    render(); return;
+  }
+  if (a === "copyreview") {
+    revText = buildReviewText(S, fmt(new Date()));
+    revNote = copyText(revText) ? "コピーしました。Claudeのチャットに貼り付けてください" : "下を長押ししてコピーしてください";
+    render(); return;
+  }
+  if (a === "import") {
+    var ta = document.getElementById("imp");
+    try {
+      var parsed = JSON.parse(ta.value);
+      S = migrate(parsed);
+      save(); setNote = "取り込み完了(" + Object.keys(S.entries).length + "日分)";
+    } catch(e) { setNote = "取り込み失敗: JSONを確認してください"; }
+    render(); return;
+  }
+  if (a === "reset1") {
+    armed = true; clearTimeout(armTimer);
+    armTimer = setTimeout(function(){ armed=false; render(); }, 5000);
+    render(); return;
+  }
+  if (a === "reset2") {
+    S = defaultData(); armed = false; save(); render(); return;
+  }
+});
+
+document.addEventListener("change", function(ev){
+  var t = ev.target;
+  if (t.id === "wv") {
+    var e = Object.assign({}, S.entries[sel] || {});
+    var val = (t.value || "").replace(/[^0-9.]/g, "");
+    if (val === "") delete e.weightVal; else e.weightVal = val;
+    S.entries[sel] = e; save(); render(); return;
+  }
+  var th = t.closest("[data-th]");
+  if (th) { S.th[th.dataset.th] = +t.value; save(); render(); return; }
+});
+
+/* テストフック */
+window.__flourish = {
+  getS: function(){ return S; },
+  setS: function(v){ S = v; },
+  save: save, render: render,
+  achieved: achieved, phi: phi, buildCSV: buildCSV, weekStats: weekStats,
+  defaultData: defaultData, migrate: migrate, fmt: fmt, weekStart: weekStart,
+  buildReviewText: buildReviewText, KEY: KEY,
+};
+
+render();
+</script>
+</body>
+</html>
