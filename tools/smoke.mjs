@@ -57,13 +57,19 @@ const saved = await page.evaluate(() => localStorage.getItem("flourish-log-v2"))
 check("1タップで localStorage に保存される", !!saved && saved.includes("ashwagandha"));
 check("「✓ 保存済み」が出る", (await page.textContent("#saveState")) === "✓ 保存済み");
 
+await page.getByRole("button", { name: "〜6:30", exact: true }).click();
+const wake = await page.evaluate(() => JSON.parse(localStorage.getItem("flourish-log-v2")));
+const wakeDay = wake.entries[Object.keys(wake.entries)[0]];
+check("起床時刻が1タップで保存される", wakeDay.wake === 1, JSON.stringify(wakeDay));
+
 for (const tab of ["週", "推移", "週報", "設定"]) {
   await page.getByRole("button", { name: tab, exact: true }).click();
   const len = (await page.textContent("#view")).length;
   check(`タブ「${tab}」が描画される`, len > 50, `${len}文字`);
 }
 await page.getByRole("button", { name: "推移", exact: true }).click();
-check("推移タブにSVGが2枚以上ある", (await page.locator("svg").count()) >= 2);
+check("推移タブにSVGが3枚以上ある", (await page.locator("svg").count()) >= 3);
+check("推移タブに起床時刻チャートがある", (await page.textContent("#view")).includes("起床時刻(28日)"));
 
 const icon = await page.evaluate(async () => {
   const im = new Image();

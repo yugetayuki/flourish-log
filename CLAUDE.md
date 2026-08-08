@@ -4,7 +4,7 @@
 Claude.ai チャット上で要件定義〜v2.0まで開発された。本書は Claude Code への引き継ぎ資料。
 
 - 最終更新: 2026-08-08 / 現行バージョン: **v2.4**(`index.html` 内 eyebrow 表記と一致させること)
-- テスト: `npm install && npm test`(vitest 50本 + 実ブラウザ smoke 14項目、全パス)
+- テスト: `npm install && npm test`(vitest 58本 + 実ブラウザ smoke 16項目、全パス)
 
 ### 名前について(v2.3で改称)
 
@@ -76,13 +76,13 @@ Claude.ai チャット上で要件定義〜v2.0まで開発された。本書は
   `change` は `#wv`(体重数値)と `[data-th]`(達成ラインselect)。
 - 再描画で入力フォーカスが飛ぶため、自由入力は `change` イベント(blur/確定時)でのみ処理する方針。踏襲すること。
 
-### データモデル(localStorage `flourish-log-v2`、schema v3)
+### データモデル(localStorage `flourish-log-v2`、schema v4)
 
 形は `defaultData()` を読めば分かる。コードから読み取れない意味論だけを書く。
 
 - `th` = 達成ライン。**このインデックス以下で達成**(bedtime: 0..3 / youtube: 0..2)。
 - **entriesの意味論(重要)**: キーの日付=「記録した朝」。フィールドが指す時点は
-  前夜(bedtime, ashwagandha)/ 当朝(sleepFeel, creatine, weight, weightVal)/ 前日(youtube, gym, study, カスタム)。
+  前夜(bedtime, ashwagandha)/ 当朝(wake, sleepFeel, creatine, weight, weightVal)/ 前日(youtube, gym, study, カスタム)。
 - 値の欠損はキー自体を削除して表現(`null` を書き込まない)。全フィールド空になったらその日付キーごと削除。
 
 ### 不変条件・約束事
@@ -114,6 +114,16 @@ Claude.ai チャット上で要件定義〜v2.0まで開発された。本書は
   再読み込みされずに復帰しうるので、`sel` が前日のままだと翌朝の入力が前日の欄に入る。
   ただし遡及入力の途中で復帰した人まで今日へ引き戻すと入力先が黙って変わるため、
   `sel === lastToday` のときに限る。`lastToday` は `render()` が毎回更新する。
+- **起床時刻(`wake`)は計測のみ。目標・達成ライン・達成判定を持たせない。** 就寝と起床の両方を
+  未達判定の対象にすると1日あたりの「失敗」の面積が二重になり、設計制約1・2(完璧主義への配慮)の趣旨と衝突する。
+  記録の目的は睡眠時間の推定と起床時刻のばらつきの可視化であり、これは達成/未達の二値では表せない。
+  よって `CORE` にも `targets` にも `th` にも入れず、`enabled` と `entries[].wake` だけを持つ。
+  評価色(達成の `--pine` / 超過の `--sienna`)も使わず、`--indigo` の濃淡だけで早い→遅いを示す。
+  週報テキストには生の分布を渡し、解釈は Claude 側に置く(バケット中央値からの睡眠時間を
+  アプリが「◯時間」と断定表示すると、推定値が実測のように見えるため)。
+- **時刻の選択肢(`BEDTIME_OPTS` / `WAKE_OPTS`)の刻みを後から変えない。** 保存されるのは
+  インデックスなので、境界を動かすと過去の記録の意味が黙って変わる。変える場合は `migrate()` での
+  読み替えとセットで設計すること。
 - **外部通信をゼロに保つ(v2.2)。** CSP(`connect-src 'none'` ほか)を `<meta>` で宣言済み。
   通信を1本でも足すと CSP に阻まれ、テスト(「外部への通信コードとリソース参照を持たない」)も落ちる。
   仕様変更なしに `fetch` 等を足さないこと。バックログP2のAPI直呼びを実装する場合は、
@@ -140,8 +150,8 @@ Claude.ai チャット上で要件定義〜v2.0まで開発された。本書は
 
 ```bash
 npm install
-npm test        # vitest 50本。ロジックとDOM操作
-npm run smoke   # 実ブラウザ(Chromium) 14項目。描画・保存・CSPの実効性
+npm test        # vitest 58本。ロジックとDOM操作
+npm run smoke   # 実ブラウザ(Chromium) 16項目。描画・保存・CSPの実効性
 ```
 
 - 方式: 出荷物である `index.html` そのものを `JSDOM(html, {runScripts:"dangerously"})` で起動し、
@@ -239,8 +249,8 @@ v2.0に至るまでに以下を検証して破棄した。同じ穴を掘り直�
 
 ```bash
 npm install
-npm test        # 50 passed
-npm run smoke   # 14/14 passed
+npm test        # 58 passed
+npm run smoke   # 16/16 passed
 ```
 
 1. `.claude/rules/10-guardrails.md` を読む(これが受け入れ基準)。

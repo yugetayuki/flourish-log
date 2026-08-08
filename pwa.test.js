@@ -117,10 +117,10 @@ describe("PWA v2.4: ロジック(移植の同一性)", () => {
   it("buildCSV: ラベル/1/0/空の変換", () => {
     const f = boot().window.__flourish;
     const d = f.defaultData();
-    d.entries["2026-08-08"] = { bedtime: 4, sleepFeel: 1, youtube: 0, ashwagandha: false, creatine: true, weight: true, weightVal: "68.5", gym: false, study: true };
+    d.entries["2026-08-08"] = { bedtime: 4, wake: 1, sleepFeel: 1, youtube: 0, ashwagandha: false, creatine: true, weight: true, weightVal: "68.5", gym: false, study: true };
     const [head, row] = f.buildCSV(d).split("\n");
     expect(head).toContain("就寝時刻");
-    expect(row).toBe("2026-08-08,以降,普通,<30分,0,1,1,68.5,0,1");
+    expect(row).toBe("2026-08-08,以降,〜6:30,普通,<30分,0,1,1,68.5,0,1");
   });
 
   it("週報コピー用テキストに凡例と今週/前週JSONが含まれる", () => {
@@ -287,7 +287,7 @@ describe("PWA v2.4: CSVの列ずれ", () => {
     const [head, row] = f.buildCSV(d).split("\n");
     expect(head).toContain('"読書, 英語"');
     expect(head.split('"').length).toBe(3); // 引用符は1フィールド分の2つだけ
-    expect(row).toBe("2026-08-08,,,,,,,,1,,1");
+    expect(row).toBe("2026-08-08,,,,,,,,,1,,1");
   });
 
   it("引用符を含むラベルは二重引用符でエスケープする", () => {
@@ -390,7 +390,7 @@ describe("PWA v2.4: 取り込んだJSONを信用しない", () => {
   it("lastBackup を持たない v2 データも読める", () => {
     const f = boot().window.__flourish;
     const m = f.migrate({ version: 2, entries: { "2026-08-01": { gym: true } } });
-    expect(m.version).toBe(3);
+    expect(m.version).toBe(4);
     expect(m.lastBackup).toBe(null);
     expect(m.entries["2026-08-01"].gym).toBe(true);
   });
@@ -521,6 +521,93 @@ describe("PWA v2.4: バックアップの記録", () => {
     await tick();
     expect(dom.window.__flourish.getS().lastBackup).toBe(null);
     expect(q(dom, "#setnote").textContent).toContain("中止");
+  });
+});
+
+describe("PWA v2.4: 起床時刻(計測のみ)", () => {
+  it("記録タブでタップすると当朝の wake として保存される", () => {
+    const dom = boot();
+    const f = dom.window.__flourish;
+    byText(dom, "button.sb", "〜6:30").click();
+    const saved = JSON.parse(dom.window.localStorage.getItem(KEY));
+    expect(saved.entries[f.fmt(new Date())].wake).toBe(1);
+    expect(byText(dom, "button.sb", "〜6:30").getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("同じボタン2回タップで未入力に戻る", () => {
+    const dom = boot();
+    const btn = () => byText(dom, "button.sb", "〜7:00");
+    btn().click();
+    btn().click();
+    expect(Object.keys(JSON.parse(dom.window.localStorage.getItem(KEY)).entries).length).toBe(0);
+  });
+
+  // 就寝と起床の両方を未達判定の対象にすると1日の失敗面積が二重になるため、起床は計測のみに留める
+  it("週の目標・達成ラインを持たず、週タブでは計測のみと表示する", () => {
+    const f0 = boot().window.__flourish;
+    const d = f0.defaultData();
+    d.entries[f0.fmt(new Date())] = { wake: 0 };
+    const dom = boot(JSON.stringify(d));
+    byText(dom, "button.tb", "設定").click();
+    expect(qa(dom, "[data-tgt]").some((el) => el.dataset.tgt === "wake")).toBe(false);
+    expect(q(dom, '[data-th="wake"]')).toBe(null);
+    byText(dom, "button.tb", "週").click();
+    const rows = qa(dom, ".wrow").filter((el) => el.textContent.includes("起床時刻"));
+    expect(rows.length).toBe(1);
+    expect(rows[0].textContent).toContain("計測のみ");
+    expect(rows[0].querySelectorAll(".dot.ok").length).toBe(0);
+  });
+
+  it("CSVと週報データに起床時刻が入る", () => {
+    const f = boot().window.__flourish;
+    const d = f.defaultData();
+    d.entries["2026-08-08"] = { bedtime: 0, wake: 3 };
+    const [head, row] = f.buildCSV(d).split("\n");
+    expect(head).toContain("起床時刻");
+    expect(row).toBe("2026-08-08,〜23:00,〜7:30,,,,,,,,");
+    const t = f.buildReviewText(d, "2026-08-08");
+    expect(t).toContain("wake=[〜6:00,〜6:30,〜7:00,〜7:30,以降]");
+    expect(t).toContain("計測のみ");
+    expect(t).toContain('"wake":');
+  });
+
+  it("wake を持たない旧データも読め、version が上がる", () => {
+    const f = boot().window.__flourish;
+    const m = f.migrate({ version: 3, entries: { "2026-08-01": { bedtime: 1 } } });
+    expect(m.version).toBe(4);
+    expect(m.enabled.wake).toBe(true);
+    expect(m.entries["2026-08-01"]).toEqual({ bedtime: 1 });
+  });
+
+  it("表示トグルを切ると記録タブから消える", () => {
+    const dom = boot();
+    expect(q(dom, '[data-f="wake"]')).not.toBe(null);
+    byText(dom, "button.tb", "設定").click();
+    q(dom, '[data-tog="wake"]').click();
+    byText(dom, "button.tb", "記録").click();
+    expect(q(dom, '[data-f="wake"]')).toBe(null);
+  });
+
+  it("推移タブに起床時刻のチャートが出る", () => {
+    const dom = boot();
+    byText(dom, "button.tb", "推移").click();
+    expect(q(dom, "#view").textContent).toContain("起床時刻(28日)");
+    expect(qa(dom, "svg").length).toBeGreaterThanOrEqual(3);
+  });
+
+  it("28日そろうと起床時刻の相関ヒントが計算される", () => {
+    const f0 = boot().window.__flourish;
+    const d = f0.defaultData();
+    for (let i = 0; i < 28; i++) {
+      const dt = new Date("2026-07-01T00:00");
+      dt.setDate(dt.getDate() + i);
+      d.entries[f0.fmt(dt)] = { wake: i % 2 ? 3 : 0, sleepFeel: i % 2 ? 2 : 0 };
+    }
+    const dom = boot(JSON.stringify(d));
+    byText(dom, "button.tb", "週報").click();
+    const view = q(dom, "#view").textContent;
+    expect(view).toContain("起床が〜6:30以内 × 眠れた感「良」");
+    expect(view).toContain("φ=1.00");
   });
 });
 

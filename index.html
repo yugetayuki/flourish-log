@@ -132,8 +132,13 @@ svg{display:block}
 /* ================= 定数 ================= */
 var KEY = "flourish-log-v2";
 var BROKEN_PREFIX = KEY + "-broken-";
+// 保存されるのは選択肢のインデックスなので、後から刻みの境界を変えると過去の記録の意味が黙って変わる
 var BEDTIME_OPTS = ["〜23:00","〜23:30","〜24:00","〜24:30","以降"];
 var BEDTIME_VAL  = [23, 23.5, 24, 24.5, 25.2];
+var WAKE_OPTS    = ["〜6:00","〜6:30","〜7:00","〜7:30","以降"];
+var WAKE_VAL     = [6, 6.5, 7, 7.5, 8.2];
+// 達成ラインを持たない項目なので、週タブでは達成色/注意色ではなく indigo の濃淡で早い→遅いを示す
+var WAKE_OPACITY = [.4, .55, .7, .85, 1];
 var SLEEP_OPTS   = ["良","普通","悪"];
 var YT_OPTS      = ["<30分","〜1h","〜2h","2h超"];
 var WDAY = ["月","火","水","木","金","土","日"];
@@ -159,10 +164,10 @@ function md(s){ return (+s.slice(5,7))+"/"+(+s.slice(8,10)); }
 /* ================= データ ================= */
 function defaultData(){
   return {
-    version: 3,
+    version: 4,
     targets: {bedtime:5, youtube:5, ashwagandha:6, creatine:6, weight:5, gym:3, study:5},
     th: {bedtime:2, youtube:1},
-    enabled: {bedtime:true, sleepFeel:true, youtube:true, ashwagandha:true, creatine:true, weight:true, gym:true, study:true},
+    enabled: {bedtime:true, wake:true, sleepFeel:true, youtube:true, ashwagandha:true, creatine:true, weight:true, gym:true, study:true},
     custom: [],
     entries: {},
     lastBackup: null,
@@ -185,7 +190,8 @@ function normCustom(list){
 function migrate(d){
   var b = defaultData();
   var o = Object.assign({}, b, isPlainObject(d) ? d : {});
-  o.version = 3; // v3 で lastBackup を追加。旧データは Object.assign で null が入る
+  // v3 で lastBackup、v4 で起床時刻(wake)を追加。どちらも欠損は既定値で埋まるので値の変換は要らない
+  o.version = 4;
   o.lastBackup = (d && typeof d.lastBackup === "string") ? d.lastBackup : null;
   o.targets = Object.assign({}, b.targets, isPlainObject(d && d.targets) ? d.targets : {});
   o.th = Object.assign({}, b.th, isPlainObject(d && d.th) ? d.th : {});
@@ -237,7 +243,7 @@ function weekStats(data, ws, today){
   }
   var logged = days.filter(function(dt){ return dt<=today && data.entries[dt]; }).length;
   return {range: md(days[0])+"–"+md(days[6]), logged:logged, items:per,
-    bedtime:dist("bedtime",5), sleepFeel:dist("sleepFeel",3), youtube:dist("youtube",4)};
+    bedtime:dist("bedtime",5), wake:dist("wake",5), sleepFeel:dist("sleepFeel",3), youtube:dist("youtube",4)};
 }
 // カスタム項目のラベルは自由入力なので、カンマ/引用符/改行で列がずれないよう RFC4180 で囲う
 function csvCell(v){
@@ -245,7 +251,7 @@ function csvCell(v){
   return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g,'""') + '"' : s;
 }
 function buildCSV(data){
-  var cols=["date","就寝時刻","眠れた感","YouTube","アシュワガンダ","クレアチン","体重測定","体重","ジム","勉強"]
+  var cols=["date","就寝時刻","起床時刻","眠れた感","YouTube","アシュワガンダ","クレアチン","体重測定","体重","ジム","勉強"]
     .concat(data.custom.map(function(c){return c.label;}));
   function b(v){ return v==null ? "" : v===true ? 1 : v===false ? 0 : v; }
   var lines=[cols.map(csvCell).join(",")];
@@ -253,6 +259,7 @@ function buildCSV(data){
     var e=data.entries[dt];
     var row=[dt,
       e.bedtime!=null?BEDTIME_OPTS[e.bedtime]:"",
+      e.wake!=null?WAKE_OPTS[e.wake]:"",
       e.sleepFeel!=null?SLEEP_OPTS[e.sleepFeel]:"",
       e.youtube!=null?YT_OPTS[e.youtube]:"",
       b(e.ashwagandha), b(e.creatine), b(e.weight), e.weightVal!=null?e.weightVal:"", b(e.gym), b(e.study)]
@@ -267,7 +274,8 @@ function buildReviewText(data, today){
   var p = weekStats(data, addDays(ws,-7), today);
   return "【Aubade 週報データ " + s.range + "】\n"
     + "以下のデータで週次レビューを書いてください。形式: 【事実】3行以内 / 【解釈】2行以内(推測と明示) / 【来週の一点】1つだけ具体的に。責めない・説教しない・淡々と。環境設計(摩擦の調整)の観点で提案。\n"
-    + "凡例: bedtime=[〜23:00,〜23:30,〜24:00,〜24:30,以降] sleepFeel=[良,普通,悪] youtube=[<30分,〜1h,〜2h,2h超]\n"
+    + "凡例: bedtime=[〜23:00,〜23:30,〜24:00,〜24:30,以降] wake=[〜6:00,〜6:30,〜7:00,〜7:30,以降] sleepFeel=[良,普通,悪] youtube=[<30分,〜1h,〜2h,2h超]\n"
+    + "wake(起床時刻)は計測のみで、達成判定の対象ではありません。\n"
     + "今週: " + JSON.stringify(s) + "\n前週: " + JSON.stringify(p);
 }
 
@@ -412,6 +420,7 @@ function viewLog(today){
   var en = S.enabled;
   var fields = [];
   if (en.bedtime) fields.push(e.bedtime!=null);
+  if (en.wake) fields.push(e.wake!=null);
   if (en.sleepFeel) fields.push(e.sleepFeel!=null);
   if (en.youtube) fields.push(e.youtube!=null);
   if (en.ashwagandha) fields.push(e.ashwagandha!=null);
@@ -439,6 +448,9 @@ function viewLog(today){
   h += '<div class="card"><div class="chead"><span class="ctitle">昨夜</span></div>'+night+'</div>';
 
   var morn = '';
+  // 就寝時刻と違い達成ラインを持たないので、超過を示す sienna は使わず睡眠系の indigo で統一する
+  if (en.wake) morn += row("起床時刻","布団を出た時刻",
+    seg("wake", WAKE_OPTS, e.wake!=null?e.wake:null, ["on-indigo","on-indigo","on-indigo","on-indigo","on-indigo"]));
   if (en.sleepFeel) morn += row("眠れた感","主観でOK",
     seg("sleepFeel", SLEEP_OPTS, e.sleepFeel!=null?e.sleepFeel:null, ["on-pine","on-gray","on-sienna"]));
   if (en.creatine) morn += row("クレアチン","コーヒーの横に", pairBtn("creatine", e.creatine!=null?e.creatine:null));
@@ -498,6 +510,18 @@ function viewWeek(today){
       + '<div class="dots">'+dots+'</div></div>';
   });
 
+  if (S.enabled.wake) {
+    var wd='';
+    days.forEach(function(dt){
+      if (dt > today) { wd += '<span class="dot fut"></span>'; return; }
+      var v = (S.entries[dt]||{}).wake;
+      if (v == null) { wd += '<span class="dot miss"></span>'; return; }
+      // 見たいのは良し悪しではなく起床時刻のばらつきなので、濃淡だけで早い→遅いを示す
+      wd += '<span class="dot" style="background:var(--indigo);opacity:'+WAKE_OPACITY[v]+'"></span>';
+    });
+    h += '<div class="wrow"><div class="wname"><span class="wl">起床時刻</span><span class="wc" style="color:var(--sub)">計測のみ</span></div>'
+      + '<div class="dots">'+wd+'</div></div>';
+  }
   if (S.enabled.sleepFeel) {
     var fd='';
     days.forEach(function(dt){
@@ -553,6 +577,7 @@ function viewTrend(today){
     var e = S.entries[dt] || {};
     rows.push({d: md(dt),
       bed: e.bedtime!=null ? BEDTIME_VAL[e.bedtime] : null,
+      wake: e.wake!=null ? WAKE_VAL[e.wake] : null,
       yt: e.youtube!=null ? e.youtube : null,
       w: (e.weightVal!=null && e.weightVal!=="") ? Number(e.weightVal) : null});
   }
@@ -560,6 +585,10 @@ function viewTrend(today){
   var ytT=YT_OPTS.map(function(o,i){return {v:i,l:o};});
   var h = '<div class="card"><div class="chead"><span class="ctitle">就寝時刻(28日)</span></div><div class="chartbox">'
     + svgChart(rows,"bed",22.8,25.4,bedT,BEDTIME_VAL[S.th.bedtime],"#43507A") + '</div></div>';
+  var wakeT=[{v:6,l:"6:00"},{v:6.5,l:"6:30"},{v:7,l:"7:00"},{v:7.5,l:"7:30"},{v:8.2,l:"以降"}];
+  // 達成ラインを持たない項目なので基準線(refY)は引かない
+  h += '<div class="card"><div class="chead"><span class="ctitle">起床時刻(28日)</span></div><div class="chartbox">'
+    + svgChart(rows,"wake",5.8,8.4,wakeT,null,"#43507A") + '</div></div>';
   h += '<div class="card"><div class="chead"><span class="ctitle">YouTube(28日)</span></div><div class="chartbox">'
     + svgChart(rows,"yt",-0.2,3.2,ytT,S.th.youtube,"#A9663B") + '</div></div>';
   var ws = rows.filter(function(r){return r.w!=null;}).map(function(r){return r.w;});
@@ -605,6 +634,7 @@ function viewReview(today){
     }
     var defs=[
       {l:"就寝が達成ライン内 × 眠れた感「良」", ps:mk(function(e){return e.bedtime==null?null:e.bedtime<=S.th.bedtime;}, function(e){return e.sleepFeel==null?null:e.sleepFeel===0;})},
+      {l:"起床が〜6:30以内 × 眠れた感「良」", ps:mk(function(e){return e.wake==null?null:e.wake<=1;}, function(e){return e.sleepFeel==null?null:e.sleepFeel===0;})},
       {l:"YouTube多め(〜2h以上) × 就寝が遅い", ps:mk(function(e){return e.youtube==null?null:e.youtube>=2;}, function(e){return e.bedtime==null?null:e.bedtime>S.th.bedtime;})},
       {l:"ジムをした × 眠れた感「良」", ps:mk(function(e){return e.gym==null?null:e.gym===true;}, function(e){return e.sleepFeel==null?null:e.sleepFeel===0;})},
       {l:"勉強した × YouTube多め", ps:mk(function(e){return e.study==null?null:e.study===true;}, function(e){return e.youtube==null?null:e.youtube>=2;})},
@@ -659,7 +689,7 @@ function viewSettings(){
   h += '</select></div></div>';
 
   h += '<div class="card"><div class="chead"><span class="ctitle">表示する項目</span></div>';
-  var togs=[["bedtime","就寝時刻"],["sleepFeel","眠れた感"],["youtube","YouTube"],["ashwagandha","アシュワガンダ"],["creatine","クレアチン"],["weight","体重測定"],["gym","ジム"],["study","勉強"]];
+  var togs=[["bedtime","就寝時刻"],["wake","起床時刻"],["sleepFeel","眠れた感"],["youtube","YouTube"],["ashwagandha","アシュワガンダ"],["creatine","クレアチン"],["weight","体重測定"],["gym","ジム"],["study","勉強"]];
   togs.forEach(function(t){
     var on = S.enabled[t[0]] !== false;
     h += '<div class="srow"><span style="font-size:14px">'+t[1]+'</span>'
