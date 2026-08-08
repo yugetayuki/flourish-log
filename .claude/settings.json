@@ -1,0 +1,44 @@
+{
+  "effortLevel": "xhigh",
+  "permissions": {
+    "allow": [
+      "Bash(npm test)",
+      "Bash(npm test *)",
+      "Bash(npm run smoke)",
+      "Bash(npm run smoke *)",
+      "Bash(git status)",
+      "Bash(git status *)",
+      "Bash(git diff *)",
+      "Bash(git log *)",
+      "Bash(git branch *)",
+      "Bash(git show *)",
+      "Write",
+      "Edit"
+    ],
+    "ask": [
+      "Bash(git push *)",
+      "Bash(git commit *)",
+      "Bash(rm *)",
+      "Bash(npm install *)",
+      "Bash(npm uninstall *)",
+      "Bash(gh repo create *)",
+      "Bash(gh repo edit *)",
+      "Bash(gh repo delete *)"
+    ],
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Read(./secrets/**)",
+      "Read(~/.ssh/*)",
+      "Read(~/.aws/credentials)",
+      "Read(~/.aws/config)",
+      "Bash(curl * | bash *)",
+      "Bash(curl * | sh *)",
+      "Bash(wget * | bash *)",
+      "Bash(wget * | sh *)",
+      "Bash(git reset --hard *)",
+      "Bash(git push --force *)",
+      "Bash(git clean -f *)"
+    ]
+  }
+}
