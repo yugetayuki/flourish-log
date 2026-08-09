@@ -305,7 +305,11 @@ describe("PWA v2.7: 配信ポリシー", () => {
     expect(csp).not.toBe(null);
     const c = csp.getAttribute("content");
     expect(c).toContain("default-src 'none'");
-    expect(c).toContain("connect-src 'none'"); // fetch/XHR/WebSocket/beacon を禁止
+    // 送信先はオーナーのPC(Tailscale)だけ。tailnet 内からしか引けないドメインなので、
+    // 万一HTMLを注入されても記録の持ち出し先には使えない
+    expect(c).toContain("connect-src https://*.ts.net");
+    expect(c).not.toContain("connect-src *");
+    expect(c).not.toMatch(/connect-src[^;]*http:/); // 平文へは送らせない
     expect(c).toContain("form-action 'none'");
     expect(c).toContain("base-uri 'none'");
     expect(c).toContain("img-src data:"); // アイコンは data: 埋め込みのみ
@@ -318,9 +322,17 @@ describe("PWA v2.7: 配信ポリシー", () => {
   });
 
   // sw.js は仕事上 fetch を使うので対象外。そちらの制約は「Service Worker」の describe で見る
-  it("index.html が外部への通信コードとリソース参照を持たない", () => {
-    expect(html).not.toMatch(/fetch\(|XMLHttpRequest|WebSocket|sendBeacon/);
+  //
+  // 通信は「オーナーが設定したPCへ送る1本」だけ。fetch を全面禁止にできなくなった代わりに、
+  // 送信先が設定値以外になっていないことと、他の通信APIが増えていないことを見る
+  it("index.html の通信は同期の1本だけで、送信先はハードコードされていない", () => {
+    expect(html).not.toMatch(/XMLHttpRequest|WebSocket|sendBeacon/);
     expect(html).not.toMatch(/(src|href)\s*=\s*["']https?:/);
+    const calls = html.match(/fetch\(/g) || [];
+    expect(calls.length).toBe(1);
+    expect(html).toMatch(/fetch\(syncCfg\.url,/); // 宛先は設定値のみ
+    // URL もトークンもコードに書かない。このリポジトリは Public
+    expect(html).not.toMatch(/https:\/\/[a-z0-9-]+\.[a-z0-9.-]*ts\.net/i);
   });
 });
 
@@ -330,7 +342,7 @@ describe("PWA v2.7: Service Worker", () => {
   it("CSPが worker-src 'self' を許可する", () => {
     const c = q(boot(), 'meta[http-equiv="Content-Security-Policy"]').getAttribute("content");
     expect(c).toContain("worker-src 'self'"); // 無いと default-src 'none' まで落ちて登録が弾かれる
-    expect(c).toContain("connect-src 'none'"); // 緩めたのは worker-src だけ
+    expect(c).toContain("connect-src https://*.ts.net"); // 緩めたのは worker-src と同期先だけ
   });
 
   it("index.htmlが機能検出つきで登録し、失敗を握りつぶさない", () => {
@@ -1192,5 +1204,172 @@ describe("PWA v2.7: 整腸剤・サプリ", () => {
     ["朝サプリ", "昼サプリ", "晩サプリ"].forEach((c) => expect(head).toContain(c));
     expect(row).toBe("2026-08-08,,,,,,,,,,,,,,,,,,1,,0");
     expect(f.buildReviewText(d, "2026-08-08")).toContain("食事の節制と整腸剤・サプリは1日3回ぶんを記録し");
+  });
+});
+
+describe("PWA v2.7: PCへの同期(任意)", () => {
+  const SYNC_KEY = "flourish-log-v2-sync";
+  const URL_OK = "https://pc.example-tailnet.ts.net/aubade";
+  // fetch は JSDOM に無い。呼ばれた内容を記録し、応答を差し替えられるようにする
+  const stubFetch = (dom, impl) => {
+    const calls = [];
+    dom.window.fetch = (url, init) => { calls.push({ url, init }); return impl(url, init); };
+    return calls;
+  };
+  const ok = () => Promise.resolve({ ok: true, status: 200 });
+  const configure = (dom, url, token) => {
+    const f = dom.window.__flourish;
+    byText(dom, "button.tb", "設定").click();
+    const set = (id, v) => {
+      const el = q(dom, "#" + id);
+      el.value = v;
+      el.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
+    };
+    set("syncUrl", url);
+    set("syncToken", token);
+    return f;
+  };
+
+  it("未設定なら何も送らない", async () => {
+    const dom = boot();
+    const calls = stubFetch(dom, ok);
+    byText(dom, "button.sb", "✓ した").click();
+    dom.window.__flourish.syncPush();
+    await tick();
+    expect(calls.length).toBe(0);
+  });
+
+  it("設定するとURLとトークンが本体とは別のキーに保存される", () => {
+    const dom = boot();
+    configure(dom, URL_OK, "t".repeat(32));
+    const saved = JSON.parse(dom.window.localStorage.getItem(SYNC_KEY));
+    expect(saved.url).toBe(URL_OK);
+    expect(saved.token).toBe("t".repeat(32));
+    // 本体データに混ざっていない = バックアップJSONにも週報にも出ない
+    const main = dom.window.localStorage.getItem("flourish-log-v2") || "{}";
+    expect(main).not.toContain("ts.net");
+    expect(main).not.toContain("t".repeat(32));
+  });
+
+  // トークンがバックアップに混ざると、コピーや共有のたびに一緒に出ていく
+  it("JSON/CSVの書き出しにトークンが混ざらない", () => {
+    const dom = boot();
+    const f = configure(dom, URL_OK, "seekrit-token-seekrit-token-1234");
+    expect(JSON.stringify(f.getS())).not.toContain("seekrit");
+    expect(f.buildCSV(f.getS())).not.toContain("seekrit");
+    expect(f.buildReviewText(f.getS(), f.fmt(new Date()))).not.toContain("seekrit");
+  });
+
+  it("送信は設定したURLへ、Bearerトークンと全履歴で行う", async () => {
+    const f0 = boot().window.__flourish;
+    const d = f0.defaultData();
+    d.entries["2026-08-01"] = { gym: true };
+    const dom = boot(JSON.stringify(d));
+    const calls = stubFetch(dom, ok);
+    configure(dom, URL_OK, "t".repeat(32));
+    dom.window.__flourish.syncPush();
+    await tick();
+    expect(calls.length).toBe(1);
+    expect(calls[0].url).toBe(URL_OK);
+    expect(calls[0].init.method).toBe("POST");
+    expect(calls[0].init.headers.Authorization).toBe("Bearer " + "t".repeat(32));
+    expect(JSON.parse(calls[0].init.body).entries["2026-08-01"].gym).toBe(true);
+  });
+
+  // 200 は受信側が書き終えた合図。ここまで来たら実際に持ち出せている
+  it("成功したら同期日とバックアップ日を記録する", async () => {
+    const dom = boot();
+    stubFetch(dom, ok);
+    const f = configure(dom, URL_OK, "t".repeat(32));
+    f.syncPush();
+    await tick();
+    const today = f.fmt(new Date());
+    expect(JSON.parse(dom.window.localStorage.getItem(SYNC_KEY)).last).toBe(today);
+    expect(JSON.parse(dom.window.localStorage.getItem("flourish-log-v2")).lastBackup).toBe(today);
+    expect(q(dom, "#syncline").textContent).toContain("同期しました");
+  });
+
+  // PCが落ちている・tailnet 外にいるのは日常的に起きる。失敗しても記録は端末に残る
+  it("失敗しても保存は壊れず、バックアップ日も進めない", async () => {
+    const dom = boot();
+    stubFetch(dom, () => Promise.reject(new Error("接続できない")));
+    const f = configure(dom, URL_OK, "t".repeat(32));
+    f.syncPush();
+    await tick();
+    expect(f.getS().lastBackup).toBe(null);
+    expect(JSON.parse(dom.window.localStorage.getItem(SYNC_KEY)).last).toBe(null);
+    expect(q(dom, "#syncline").textContent).toContain("同期できませんでした");
+    // 保存は通常どおり続けられる
+    byText(dom, "button.tb", "記録").click();
+    byText(dom, "button.sb", "✓ した").click();
+    expect(JSON.parse(dom.window.localStorage.getItem("flourish-log-v2")).entries[f.fmt(new Date())].ashwagandha).toBe(true);
+  });
+
+  it("HTTPエラー応答を成功として扱わない", async () => {
+    const dom = boot();
+    stubFetch(dom, () => Promise.resolve({ ok: false, status: 401 }));
+    const f = configure(dom, URL_OK, "t".repeat(32));
+    f.syncPush();
+    await tick();
+    expect(f.getS().lastBackup).toBe(null);
+    expect(JSON.parse(dom.window.localStorage.getItem(SYNC_KEY)).last).toBe(null);
+    expect(q(dom, "#syncline").textContent).toContain("同期できませんでした");
+  });
+
+  // CSP は *.ts.net しか許さない。他を保存できると、送れない理由が画面から消える
+  it("ts.net 以外のURLは保存せず理由を出す", () => {
+    const dom = boot();
+    const f = dom.window.__flourish;
+    expect(f.syncUrlOk("https://pc.example-tailnet.ts.net/aubade")).toBe(true);
+    expect(f.syncUrlOk("https://evil.example.com/aubade")).toBe(false);
+    expect(f.syncUrlOk("http://pc.example-tailnet.ts.net/")).toBe(false); // 平文は不可
+    expect(f.syncUrlOk("https://ts.net.evil.com/")).toBe(false);
+    // URLだけを入れる。トークンまで入れると syncNote が消えて理由が見えなくなる
+    byText(dom, "button.tb", "設定").click();
+    const el = q(dom, "#syncUrl");
+    el.value = "https://evil.example.com/aubade";
+    el.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
+    expect(q(dom, "#syncline").textContent).toContain("ts.net");
+    expect(dom.window.localStorage.getItem(SYNC_KEY) || "").not.toContain("evil");
+  });
+
+  it("保存のたびに送らず、まとめてから送る", async () => {
+    const dom = boot();
+    const calls = stubFetch(dom, ok);
+    configure(dom, URL_OK, "t".repeat(32));
+    byText(dom, "button.tb", "記録").click();
+    byText(dom, "button.sb", "✓ した").click();
+    byText(dom, "button.sb", "〜23:00").click();
+    await tick();
+    expect(calls.length).toBe(0); // 待ち時間の前には飛ばない
+  });
+
+  // 送信の成功で lastBackup を更新するので、save() を呼ぶと保存→同期→保存の再帰になる
+  it("同期の成功が次の同期を呼び戻さない", async () => {
+    const dom = boot();
+    const calls = stubFetch(dom, ok);
+    const f = configure(dom, URL_OK, "t".repeat(32));
+    f.syncPush();
+    await tick();
+    await tick();
+    expect(calls.length).toBe(1);
+  });
+
+  it("取り込んだJSONで送信先が書き換わらない", () => {
+    const dom = boot();
+    const f = configure(dom, URL_OK, "t".repeat(32));
+    byText(dom, "button.tb", "設定").click();
+    q(dom, "#imp").value = JSON.stringify({ version: 6, entries: {}, url: "https://evil.example.com", token: "x" });
+    byText(dom, "button.ghost", "取り込む").click();
+    expect(f.getSync().url).toBe(URL_OK);
+    expect(f.getSync().token).toBe("t".repeat(32));
+  });
+
+  it("fetch が無い環境でも例外を投げない", async () => {
+    const dom = boot();
+    const f = configure(dom, URL_OK, "t".repeat(32));
+    dom.window.fetch = undefined;
+    expect(() => f.syncPush()).not.toThrow();
+    expect(q(dom, "#syncline").textContent).toContain("この端末では同期できません");
   });
 });

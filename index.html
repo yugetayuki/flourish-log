@@ -2,13 +2,16 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<!-- 外部通信ゼロという実態をブラウザ側にも宣言する。
-     connect-src 'none' により、万一HTMLを注入されても記録を外部へ持ち出せない。
+<!-- 送信先を1種類に絞ってブラウザ側にも宣言する。
+     connect-src は *.ts.net だけ。ここはオーナー自身のPCへ写しを送るための Tailscale の
+     ドメインで、tailnet に参加している端末からしか到達できない(インターネットからは引けない)。
+     具体的なホスト名を書かないのは、このリポジトリが Public だから。ワイルドカードでも
+     許されるのは Tailscale 内部のホストだけなので、持ち出し先としては使えない。
      インラインの script/style は本アプリの本体なので 'unsafe-inline' は外せない。
      worker-src 'self' は Service Worker の登録に要る。既定では default-src 'none' まで
      フォールバックして登録が弾かれる。同一オリジンのファイルしか読めないので範囲は広がらない。
      frame-ancestors は meta 経由では無視される仕様のため、ここには書いていない。 -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; connect-src 'none'; worker-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; connect-src https://*.ts.net; worker-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="robots" content="noindex, nofollow">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Aubade</title>
@@ -385,10 +388,18 @@ function save(){
   try {
     localStorage.setItem(KEY, JSON.stringify(S));
     flash("✓ 保存済み", false);
+    scheduleSync();
   } catch(e) {
     console.error("[flourish] 保存に失敗しました", e);
     flash("保存エラー: " + (e && e.message || e), true);
   }
+}
+// 同期の成功で lastBackup を更新するときに使う。ここで save() を呼ぶと
+// 保存 → 同期 → 保存 … と再帰するため、書き込みだけを行う
+function persistQuiet(){
+  if (saveBlocked) return;
+  try { localStorage.setItem(KEY, JSON.stringify(S)); }
+  catch(e) { console.error("[flourish] 保存に失敗しました", e); }
 }
 function flash(msg, isErr){
   var el = document.getElementById("saveState");
@@ -429,6 +440,87 @@ function shareBackup(){
     render();
   });
 }
+/* ================= PCへの同期(任意) ================= */
+// 記録はこの端末の localStorage にしか無く、iOS の PWA はバックグラウンドで動けない。
+// なので「開いている間に、オーナー自身のPCへ全履歴を送る」形にしてある。
+// 送るのは常に全履歴のスナップショットなので、送れなかった日があっても
+// 次に成功した1回で追いつく。差分もリトライ待ち行列も持たない。
+//
+// 設定を本体データ(KEY)と別のキーに置くのは、同じ blob に入れるとトークンが
+// バックアップJSONに混ざり、クリップボードコピーやファイル共有のたびに一緒に出ていくため。
+// 取り込み(migrate)の対象外にもなるので、他人のJSONを取り込んでも送信先は書き換わらない。
+var SYNC_KEY = KEY + "-sync";
+var syncCfg = loadSync();
+var syncNote = null;  // 直近の結果。設定タブにだけ出す
+var syncTimer = null;
+
+function loadSync(){
+  var d = {url:"", token:"", last:null};
+  try {
+    var t = localStorage.getItem(SYNC_KEY);
+    if (!t) return d;
+    var o = JSON.parse(t);
+    return {
+      url: typeof o.url === "string" ? o.url : "",
+      token: typeof o.token === "string" ? o.token : "",
+      last: typeof o.last === "string" ? o.last : null,
+    };
+  } catch(e) {
+    console.error("[flourish] 同期設定を読めませんでした", e);
+    return d;
+  }
+}
+function saveSync(){
+  try { localStorage.setItem(SYNC_KEY, JSON.stringify(syncCfg)); }
+  catch(e) { console.error("[flourish] 同期設定を保存できませんでした", e); }
+}
+// CSP が https://*.ts.net しか許さないので、それ以外を入れても送信は黙って失敗する。
+// 違反はコンソールにしか出ず画面からは理由が分からないため、入口で弾いて理由を見せる
+function syncUrlOk(u){
+  return typeof u === "string" && /^https:\/\/[a-z0-9-]+(\.[a-z0-9-]+)*\.ts\.net(\/[^\s]*)?$/i.test(u);
+}
+function syncReady(){ return syncUrlOk(syncCfg.url) && syncCfg.token !== ""; }
+// 朝は十数回タップする。その都度送らずにまとめる
+function scheduleSync(){
+  if (!syncReady()) return;
+  clearTimeout(syncTimer);
+  syncTimer = setTimeout(syncPush, 4000);
+}
+function syncPush(){
+  clearTimeout(syncTimer);
+  if (!syncReady()) return;
+  if (typeof fetch !== "function") {
+    console.error("[flourish] この環境には fetch がありません");
+    syncNote = {ok:false, msg:"この端末では同期できません"};
+    if (tab === "settings") render();
+    return;
+  }
+  fetch(syncCfg.url, {
+    method: "POST",
+    headers: {"Content-Type":"application/json", "Authorization":"Bearer " + syncCfg.token},
+    body: JSON.stringify(S),
+  // 成功側で throw すると .then(ok, err) の err は呼ばれず、未処理の rejection になる。
+  // 失敗の扱いを1箇所にまとめて、応答が返った場合も返らなかった場合もここを通す
+  }).then(function(res){
+    if (!res || !res.ok) { syncFailed(new Error("HTTP " + (res && res.status))); return; }
+    // 200 は受信側がファイルを書き終えた合図。ここまで来て初めて「実際に持ち出せた」
+    syncCfg.last = fmt(new Date());
+    saveSync();
+    S.lastBackup = syncCfg.last;
+    persistQuiet();
+    syncNote = {ok:true, msg:"同期しました"};
+    // 朝の入力中に画面を作り直すと入力位置が飛ぶので、設定タブを見ているときだけ描き直す
+    if (tab === "settings") render();
+  }, syncFailed);
+}
+// PCが落ちている・tailnet に繋がっていないのは日常的に起きる。記録は端末に残るので
+// アプリは止めず、設定タブで事実だけ見せる(催促はしない)
+function syncFailed(e){
+  console.error("[flourish] 同期できませんでした", e);
+  syncNote = {ok:false, msg:"同期できませんでした(記録は端末に残っています)"};
+  if (tab === "settings") render();
+}
+
 function copyText(t, done){
   var p;
   try { p = navigator.clipboard && navigator.clipboard.writeText(t); }
@@ -833,6 +925,17 @@ function backupLine(){
   return '<p class="note mono" id="backupline" style="color:'+(days >= 60 ? "var(--sienna)" : "var(--sub)")+'">'
     + '最後のバックアップ: ' + md(S.lastBackup) + '(' + when + ')</p>';
 }
+// バックアップ日と同じ形。日付の事実だけを出し、増減の評価や指示は付けない
+function syncLine(){
+  if (syncNote) {
+    return '<p class="note" id="syncline" style="color:'+(syncNote.ok?'var(--pine)':'var(--sienna)')+'">'+esc(syncNote.msg)+'</p>';
+  }
+  if (!syncReady()) return '<p class="note" id="syncline" style="color:var(--sub)">未設定</p>';
+  if (!syncCfg.last) return '<p class="note" id="syncline" style="color:var(--sub)">まだ同期していません。</p>';
+  var days = Math.round((parseD(fmt(new Date())) - parseD(syncCfg.last)) / 86400000);
+  return '<p class="note mono" id="syncline" style="color:var(--sub)">最後の同期: '
+    + md(syncCfg.last) + '(' + (days <= 0 ? "今日" : days + "日前") + ')</p>';
+}
 function viewSettings(){
   var h = '<div class="card"><div class="chead"><span class="ctitle">週の目標</span></div>';
   CORE.forEach(function(c){
@@ -906,6 +1009,17 @@ function viewSettings(){
     });
     h += '</div>';
   }
+  h += '</div>';
+
+  // 事実だけ出す。「同期しましょう」のような催促は置かない(設計制約5)
+  h += '<div class="card"><div class="chead"><span class="ctitle">PCへの同期(任意)</span></div>';
+  h += '<p class="note" style="color:var(--sub)">Tailscale 経由で自分のPCへ全履歴の写しを送ります。'
+    + '空欄なら何も送りません。送信先は <span class="mono">.ts.net</span> のみ許可されています。</p>';
+  h += '<input class="wv mono" id="syncUrl" inputmode="url" placeholder="https://マシン名.tailnet名.ts.net/aubade" value="'+esc(syncCfg.url)+'">';
+  // 画面に平文で出したままにしない。localStorage に入っている事実は変わらないが、肩越しには見えない
+  h += '<input class="wv mono" id="syncToken" type="password" placeholder="トークン" value="'+esc(syncCfg.token)+'">';
+  h += syncLine();
+  h += '<button class="ghost" style="margin-top:6px" data-action="syncnow"'+(syncReady()?'':' disabled style="margin-top:6px;color:var(--dim)"')+'>いま送る</button>';
   h += '</div>';
 
   h += '<div class="card"><div class="chead"><span class="ctitle">初期化</span></div><div style="padding:8px 0">';
@@ -1052,6 +1166,7 @@ document.addEventListener("click", function(ev){
     }
     render(); return;
   }
+  if (a === "syncnow") { syncNote = null; syncPush(); return; }
   if (a === "reset1") {
     armed = true; clearTimeout(armTimer);
     armTimer = setTimeout(function(){ armed=false; render(); }, 5000);
@@ -1074,6 +1189,18 @@ document.addEventListener("change", function(ev){
     if (val === "") delete e.weightVal; else e.weightVal = val;
     S.entries[sel] = e; save(); render(); return;
   }
+  if (t.id === "syncUrl") {
+    var u = (t.value || "").trim();
+    // 誤った送信先を保存させない。保存できてしまうと、送れない理由が画面から消える
+    if (u !== "" && !syncUrlOk(u)) {
+      syncNote = {ok:false, msg:"送信先は https://….ts.net の形式のみです"};
+      render(); return;
+    }
+    syncCfg.url = u; saveSync(); syncNote = null; render(); return;
+  }
+  if (t.id === "syncToken") {
+    syncCfg.token = (t.value || "").trim(); saveSync(); syncNote = null; render(); return;
+  }
   var th = t.closest("[data-th]");
   if (th) { S.th[th.dataset.th] = +t.value; save(); render(); return; }
 });
@@ -1087,6 +1214,8 @@ window.__flourish = {
   defaultData: defaultData, migrate: migrate, fmt: fmt, weekStart: weekStart,
   buildReviewText: buildReviewText, KEY: KEY, syncToday: syncToday,
   brokenKeys: brokenKeys, BROKEN_PREFIX: BROKEN_PREFIX,
+  SYNC_KEY: SYNC_KEY, getSync: function(){ return syncCfg; },
+  syncPush: syncPush, scheduleSync: scheduleSync, syncUrlOk: syncUrlOk,
 };
 
 render();

