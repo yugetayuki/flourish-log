@@ -39,11 +39,11 @@ const stubShare = (impl) => (w) => {
   w.navigator.canShare = () => true;
 };
 
-describe("PWA v2.5: 起動と基本描画", () => {
-  it("記録タブが描画され、v2.5表示がある", () => {
+describe("PWA v2.6: 起動と基本描画", () => {
+  it("記録タブが描画され、v2.6表示がある", () => {
     const dom = boot();
     expect(q(dom, "#view").textContent).toContain("就寝時刻");
-    expect(q(dom, ".eyebrow").textContent).toContain("v2.5");
+    expect(q(dom, ".eyebrow").textContent).toContain("v2.6");
   });
 
   it("正常起動では警告バナーを出さない", () => {
@@ -68,7 +68,7 @@ describe("PWA v2.5: 起動と基本描画", () => {
   });
 });
 
-describe("PWA v2.5: 保存と復元", () => {
+describe("PWA v2.6: 保存と復元", () => {
   it("タップ→localStorageに即保存され✓保存済みが出る", () => {
     const dom = boot();
     byText(dom, "button.sb", "✓ した").click(); // 最初の「した」=アシュワガンダ
@@ -97,7 +97,7 @@ describe("PWA v2.5: 保存と復元", () => {
   });
 });
 
-describe("PWA v2.5: ロジック(移植の同一性)", () => {
+describe("PWA v2.6: ロジック(移植の同一性)", () => {
   it("achieved: 就寝ライン/チェック/未入力", () => {
     const f = boot().window.__flourish;
     const d = f.defaultData();
@@ -120,7 +120,7 @@ describe("PWA v2.5: ロジック(移植の同一性)", () => {
     d.entries["2026-08-08"] = { bedtime: 4, wake: 1, sleepFeel: 1, youtube: 0, ashwagandha: false, coffee: true, creatine: true, weight: true, weightVal: "68.5", gym: false, study: true };
     const [head, row] = f.buildCSV(d).split("\n");
     expect(head).toContain("就寝時刻");
-    expect(row).toBe("2026-08-08,以降,〜6:30,普通,<30分,0,1,1,1,68.5,0,1");
+    expect(row).toBe("2026-08-08,以降,〜6:30,普通,<30分,0,1,1,1,68.5,0,1,,,,,,");
   });
 
   it("週報コピー用テキストに凡例と今週/前週JSONが含まれる", () => {
@@ -134,7 +134,7 @@ describe("PWA v2.5: ロジック(移植の同一性)", () => {
   });
 });
 
-describe("PWA v2.5: 週タブ・週報タブ", () => {
+describe("PWA v2.6: 週タブ・週報タブ", () => {
   it("週タブ: 達成した項目が1/6と表示されドットが出る", () => {
     const f0 = boot().window.__flourish;
     const d = f0.defaultData();
@@ -153,7 +153,7 @@ describe("PWA v2.5: 週タブ・週報タブ", () => {
   });
 });
 
-describe("PWA v2.5: 設定タブ", () => {
+describe("PWA v2.6: 設定タブ", () => {
   it("CSVエクスポート: テキストエリアにdate,ヘッダーが出る", () => {
     const dom = boot();
     byText(dom, "button.tb", "設定").click();
@@ -189,7 +189,7 @@ describe("PWA v2.5: 設定タブ", () => {
   });
 });
 
-describe("PWA v2.5: 壊れた保存データを黙って消さない", () => {
+describe("PWA v2.6: 壊れた保存データを黙って消さない", () => {
   const BROKEN = '{"version":2,"entries":{"2026-08-01":{"gym":true}'; // 末尾が欠けたJSON
 
   it("解析に失敗したら警告バナーを出し、原本を退避キーへ移す", () => {
@@ -232,7 +232,7 @@ describe("PWA v2.5: 壊れた保存データを黙って消さない", () => {
   });
 });
 
-describe("PWA v2.5: コピー結果を偽らない", () => {
+describe("PWA v2.6: コピー結果を偽らない", () => {
   const openExport = (dom) => {
     byText(dom, "button.tb", "設定").click();
     byText(dom, "button.ghost", "CSVをコピー").click();
@@ -278,7 +278,7 @@ describe("PWA v2.5: コピー結果を偽らない", () => {
   });
 });
 
-describe("PWA v2.5: CSVの列ずれ", () => {
+describe("PWA v2.6: CSVの列ずれ", () => {
   it("カンマを含むカスタム項目名でも列数が一致する", () => {
     const f = boot().window.__flourish;
     const d = f.defaultData();
@@ -287,7 +287,7 @@ describe("PWA v2.5: CSVの列ずれ", () => {
     const [head, row] = f.buildCSV(d).split("\n");
     expect(head).toContain('"読書, 英語"');
     expect(head.split('"').length).toBe(3); // 引用符は1フィールド分の2つだけ
-    expect(row).toBe("2026-08-08,,,,,,,,,,1,,1");
+    expect(row).toBe("2026-08-08,,,,,,,,,,1,,,,,,,,1");
   });
 
   it("引用符を含むラベルは二重引用符でエスケープする", () => {
@@ -299,7 +299,7 @@ describe("PWA v2.5: CSVの列ずれ", () => {
   });
 });
 
-describe("PWA v2.5: 配信ポリシー", () => {
+describe("PWA v2.6: 配信ポリシー", () => {
   it("CSPで外部への持ち出し経路を塞いでいる", () => {
     const csp = q(boot(), 'meta[http-equiv="Content-Security-Policy"]');
     expect(csp).not.toBe(null);
@@ -324,7 +324,7 @@ describe("PWA v2.5: 配信ポリシー", () => {
   });
 });
 
-describe("PWA v2.5: Service Worker", () => {
+describe("PWA v2.6: Service Worker", () => {
   const sw = readFileSync("sw.js", "utf8");
 
   it("CSPが worker-src 'self' を許可する", () => {
@@ -368,7 +368,7 @@ describe("PWA v2.5: Service Worker", () => {
   });
 });
 
-describe("PWA v2.5: 取り込んだJSONを信用しない", () => {
+describe("PWA v2.6: 取り込んだJSONを信用しない", () => {
   const EVIL = 'c_x" data-action="reset2';
   const importJson = (dom, data) => {
     byText(dom, "button.tb", "設定").click();
@@ -435,13 +435,13 @@ describe("PWA v2.5: 取り込んだJSONを信用しない", () => {
   it("lastBackup を持たない v2 データも読める", () => {
     const f = boot().window.__flourish;
     const m = f.migrate({ version: 2, entries: { "2026-08-01": { gym: true } } });
-    expect(m.version).toBe(4);
+    expect(m.version).toBe(5);
     expect(m.lastBackup).toBe(null);
     expect(m.entries["2026-08-01"].gym).toBe(true);
   });
 });
 
-describe("PWA v2.5: 日付またぎ", () => {
+describe("PWA v2.6: 日付またぎ", () => {
   const dateT = (dom) => q(dom, ".dateT").textContent;
 
   it("復帰時に日付が変わっていたら、今日を見ていた人を今日へ送る", () => {
@@ -489,7 +489,7 @@ describe("PWA v2.5: 日付またぎ", () => {
   });
 });
 
-describe("PWA v2.5: バックアップの記録", () => {
+describe("PWA v2.6: バックアップの記録", () => {
   const openSettings = (dom) => byText(dom, "button.tb", "設定").click();
   const ago = (f, n) => { const d = new Date(); d.setDate(d.getDate() - n); return f.fmt(d); };
 
@@ -569,7 +569,7 @@ describe("PWA v2.5: バックアップの記録", () => {
   });
 });
 
-describe("PWA v2.5: 起床時刻(計測のみ)", () => {
+describe("PWA v2.6: 起床時刻(計測のみ)", () => {
   it("記録タブでタップすると当朝の wake として保存される", () => {
     const dom = boot();
     const f = dom.window.__flourish;
@@ -609,7 +609,7 @@ describe("PWA v2.5: 起床時刻(計測のみ)", () => {
     d.entries["2026-08-08"] = { bedtime: 0, wake: 3 };
     const [head, row] = f.buildCSV(d).split("\n");
     expect(head).toContain("起床時刻");
-    expect(row).toBe("2026-08-08,〜23:00,〜7:30,,,,,,,,,");
+    expect(row).toBe("2026-08-08,〜23:00,〜7:30,,,,,,,,,,,,,,,");
     const t = f.buildReviewText(d, "2026-08-08");
     expect(t).toContain("wake=[〜6:00,〜6:30,〜7:00,〜7:30,以降]");
     expect(t).toContain("計測のみ");
@@ -619,7 +619,7 @@ describe("PWA v2.5: 起床時刻(計測のみ)", () => {
   it("wake を持たない旧データも読め、version が上がる", () => {
     const f = boot().window.__flourish;
     const m = f.migrate({ version: 3, entries: { "2026-08-01": { bedtime: 1 } } });
-    expect(m.version).toBe(4);
+    expect(m.version).toBe(5);
     expect(m.enabled.wake).toBe(true);
     expect(m.entries["2026-08-01"]).toEqual({ bedtime: 1 });
   });
@@ -656,7 +656,7 @@ describe("PWA v2.5: 起床時刻(計測のみ)", () => {
   });
 });
 
-describe("PWA v2.5: 相関ヒント", () => {
+describe("PWA v2.6: 相関ヒント", () => {
   // 同じ entry の中で対にするので、時点がずれない組み合わせしか作れない
   // (前夜のアシュワガンダ × 当朝の眠れた感 は成立、当朝のコーヒー × その夜の就寝 は成立しない)
   const seed = (f) => {
@@ -699,7 +699,7 @@ describe("PWA v2.5: 相関ヒント", () => {
   });
 });
 
-describe("PWA v2.5: 推移タブの期間切替", () => {
+describe("PWA v2.6: 推移タブの期間切替", () => {
   const openTrend = (dom) => byText(dom, "button.tb", "推移").click();
   const dayAgo = (f, n) => { const d = new Date(); d.setDate(d.getDate() - n); return f.fmt(d); };
 
@@ -738,7 +738,7 @@ describe("PWA v2.5: 推移タブの期間切替", () => {
   });
 });
 
-describe("PWA v2.5: 睡眠の帯グラフ", () => {
+describe("PWA v2.6: 睡眠の帯グラフ", () => {
   const openTrend = (dom) => byText(dom, "button.tb", "推移").click();
   const dayAgo = (f, n) => { const d = new Date(); d.setDate(d.getDate() - n); return f.fmt(d); };
   const bands = (dom) => qa(dom, "#view path[fill-opacity]").length;
@@ -805,7 +805,7 @@ describe("PWA v2.5: 睡眠の帯グラフ", () => {
   });
 });
 
-describe("PWA v2.5: 体重の自由入力", () => {
+describe("PWA v2.6: 体重の自由入力", () => {
   const enterWeight = (dom, text) => {
     q(dom, '[data-f="weight"][data-v="t"]').click();
     const wv = q(dom, "#wv");
@@ -854,7 +854,7 @@ describe("PWA v2.5: 体重の自由入力", () => {
   });
 });
 
-describe("PWA v2.5: 朝コーヒー", () => {
+describe("PWA v2.6: 朝コーヒー", () => {
   // カスタム項目は「昨日」カードに入る仕様なので、当朝の行動である朝コーヒーは CORE 側に置く
   it("記録タブの「今朝」カードにあり、✓ したで保存される", () => {
     const dom = boot();
@@ -886,7 +886,7 @@ describe("PWA v2.5: 朝コーヒー", () => {
     const [head, row] = f.buildCSV(d).split("\n");
     expect(head).toContain("朝コーヒー");
     expect(head.split(",").indexOf("朝コーヒー")).toBe(head.split(",").indexOf("クレアチン") - 1);
-    expect(row).toBe("2026-08-08,,,,,,0,,,,,");
+    expect(row).toBe("2026-08-08,,,,,,0,,,,,,,,,,,");
   });
 
   it("coffee を持たない旧データも既定値で埋まる", () => {
@@ -907,7 +907,7 @@ describe("PWA v2.5: 朝コーヒー", () => {
   });
 });
 
-describe("PWA v2.5: 週タブの前週併記", () => {
+describe("PWA v2.6: 週タブの前週併記", () => {
   const prevWeekDay = (f, n) => {
     const ws = f.weekStart(new Date());
     const d = new Date(ws);
@@ -930,5 +930,186 @@ describe("PWA v2.5: 週タブの前週併記", () => {
     const dom = boot();
     byText(dom, "button.tb", "週").click();
     expect(q(dom, "#view").textContent).not.toContain("前週");
+  });
+});
+
+describe("PWA v2.6: サウナ・歩数・休肝日", () => {
+  const today = (f) => f.fmt(new Date());
+
+  it("3項目とも「昨日」カードにあり、1タップで保存される", () => {
+    const dom = boot();
+    const f = dom.window.__flourish;
+    const card = qa(dom, ".card").find((el) => el.textContent.includes("昨日"));
+    ["サウナ", "歩数", "休肝日"].forEach((l) => expect(card.textContent).toContain(l));
+    q(dom, '[data-f="sauna"][data-v="t"]').click();
+    q(dom, '[data-f="steps"][data-v="2"]').click();
+    q(dom, '[data-f="sober"][data-v="t"]').click();
+    const e = JSON.parse(dom.window.localStorage.getItem(KEY)).entries[today(f)];
+    expect(e).toEqual({ sauna: true, steps: 2, sober: true });
+  });
+
+  // 週タブの「◯/◯」が「飲んだ日数」に読めてしまうので、飲まなかった日を数える向きで持つ
+  it("休肝日は「飲まなかった」が達成側になる", () => {
+    const dom = boot();
+    const f = dom.window.__flourish;
+    expect(byText(dom, "button.sb", "✓ 飲まなかった").dataset.v).toBe("t");
+    expect(f.achieved(f.defaultData(), { sober: true }, "sober")).toBe(true);
+    expect(f.achieved(f.defaultData(), { sober: false }, "sober")).toBe(false);
+  });
+
+  // 就寝・YouTube と違い、歩数は「達成ライン以上」で達成
+  it("歩数は達成ライン以上で達成になる", () => {
+    const f = boot().window.__flourish;
+    const d = f.defaultData();
+    expect(d.th.steps).toBe(1);
+    expect(f.achieved(d, { steps: 0 }, "steps")).toBe(false);
+    expect(f.achieved(d, { steps: 1 }, "steps")).toBe(true);
+    expect(f.achieved(d, { steps: 2 }, "steps")).toBe(true);
+    expect(f.achieved(d, {}, "steps")).toBe(null);
+    d.th.steps = 2;
+    expect(f.achieved(d, { steps: 1 }, "steps")).toBe(false);
+  });
+
+  // 最下段を選べるようにすると、どれを選んでも達成になり達成ラインが意味を失う
+  it("歩数の達成ラインは設定タブで変えられ、最下段は選べない", () => {
+    const dom = boot();
+    const f = dom.window.__flourish;
+    byText(dom, "button.tb", "設定").click();
+    const sel = q(dom, '[data-th="steps"]');
+    expect([...sel.options].map((o) => o.value)).toEqual(["1", "2"]);
+    sel.value = "2";
+    sel.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
+    expect(f.getS().th.steps).toBe(2);
+    expect(JSON.parse(dom.window.localStorage.getItem(KEY)).th.steps).toBe(2);
+  });
+
+  it("週タブと週の目標に3項目とも並ぶ", () => {
+    const f0 = boot().window.__flourish;
+    const d = f0.defaultData();
+    d.entries[today(f0)] = { sauna: true, steps: 2, sober: true };
+    const dom = boot(JSON.stringify(d));
+    byText(dom, "button.tb", "週").click();
+    const wrow = (l) => qa(dom, ".wrow").find((el) => el.textContent.includes(l));
+    expect(wrow("サウナ").textContent).toContain("1/2");
+    expect(wrow("歩数").textContent).toContain("1/5");
+    expect(wrow("休肝日").textContent).toContain("1/4");
+    expect(wrow("休肝日").querySelectorAll(".dot.ok").length).toBe(1);
+  });
+
+  it("推移タブに歩数のチャートが出る", () => {
+    const dom = boot();
+    byText(dom, "button.tb", "推移").click();
+    expect(q(dom, "#view").textContent).toContain("歩数(28日)");
+  });
+
+  it("28日そろうと休肝日の相関ヒントが計算される", () => {
+    const f0 = boot().window.__flourish;
+    const d = f0.defaultData();
+    for (let i = 0; i < 28; i++) {
+      const dt = new Date("2026-07-01T00:00");
+      dt.setDate(dt.getDate() + i);
+      d.entries[f0.fmt(dt)] = { sober: i % 2 === 0, sleepFeel: i % 2 === 0 ? 2 : 0 };
+    }
+    const dom = boot(JSON.stringify(d));
+    byText(dom, "button.tb", "週報").click();
+    const view = q(dom, "#view").textContent;
+    expect(view).toContain("前日に酒を飲んだ × 眠れた感「良」");
+    expect(view).toContain("φ=1.00");
+  });
+});
+
+describe("PWA v2.6: 食事の節制", () => {
+  const today = (f) => f.fmt(new Date());
+
+  // 朝には埋まらない項目なので、他のカードから分けて当日を指すカードに置く
+  it("「今日の食事」カードに3食ぶんあり、食べるたびに1タップで保存される", () => {
+    const dom = boot();
+    const f = dom.window.__flourish;
+    const card = qa(dom, ".card").find((el) => el.textContent.includes("今日の食事"));
+    ["朝食", "昼食", "夕食"].forEach((l) => expect(card.textContent).toContain(l));
+    q(dom, '[data-f="mealB"][data-v="t"]').click();
+    q(dom, '[data-f="mealL"][data-v="f"]').click();
+    const e = JSON.parse(dom.window.localStorage.getItem(KEY)).entries[today(f)];
+    expect(e).toEqual({ mealB: true, mealL: false });
+  });
+
+  // 記録しなかった食事は欠損であり失敗ではないので、達成の分母に入れない
+  it("記録した食事がすべて節制なら達成、1食でも崩れたら未達", () => {
+    const f = boot().window.__flourish;
+    const d = f.defaultData();
+    expect(f.achieved(d, { mealB: true, mealL: true, mealD: true }, "meal")).toBe(true);
+    expect(f.achieved(d, { mealB: true }, "meal")).toBe(true);
+    expect(f.achieved(d, { mealB: true, mealD: false }, "meal")).toBe(false);
+    expect(f.achieved(d, {}, "meal")).toBe(null);
+    expect(f.achieved(d, { gym: true }, "meal")).toBe(null);
+  });
+
+  it("週タブでは3行ではなく1行の達成率に畳まれる", () => {
+    const f0 = boot().window.__flourish;
+    const d = f0.defaultData();
+    d.entries[today(f0)] = { mealB: true, mealL: true };
+    const dom = boot(JSON.stringify(d));
+    byText(dom, "button.tb", "週").click();
+    const rows = qa(dom, ".wrow").filter((el) => el.textContent.includes("食事"));
+    expect(rows.length).toBe(1);
+    expect(rows[0].textContent).toContain("1/5");
+    expect(q(dom, "#view").textContent).not.toContain("朝食");
+  });
+
+  it("表示トグルを切るとカードごと消える", () => {
+    const dom = boot();
+    byText(dom, "button.tb", "設定").click();
+    q(dom, '[data-tog="meal"]').click();
+    byText(dom, "button.tb", "記録").click();
+    expect(q(dom, '[data-f="mealB"]')).toBe(null);
+    expect(q(dom, "#view").textContent).not.toContain("今日の食事");
+  });
+});
+
+describe("PWA v2.6: v5 スキーマ", () => {
+  it("v4 データを読んでも既存の設定を保ち、新項目は既定値で埋まる", () => {
+    const f = boot().window.__flourish;
+    const m = f.migrate({
+      version: 4,
+      targets: { gym: 4 },
+      th: { bedtime: 0 },
+      entries: { "2026-08-01": { gym: true } },
+    });
+    expect(m.version).toBe(5);
+    expect(m.targets.gym).toBe(4);
+    expect(m.th.bedtime).toBe(0);
+    expect(m.th.steps).toBe(1);
+    ["sauna", "steps", "sober", "meal"].forEach((id) => {
+      expect(m.targets[id]).toBeGreaterThan(0);
+      expect(m.enabled[id]).toBe(true);
+    });
+    expect(m.entries["2026-08-01"]).toEqual({ gym: true });
+  });
+
+  // 項目を足したときに結線を忘れても気づけるよう、目標の一覧から自動で検査対象に入れる
+  it("週の目標を持つ項目はすべて表示トグルとステッパーを持つ", () => {
+    const dom = boot();
+    const d = dom.window.__flourish.defaultData();
+    byText(dom, "button.tb", "設定").click();
+    const tgts = qa(dom, "[data-tgt]").map((el) => el.dataset.tgt);
+    const togs = qa(dom, "[data-tog]").map((el) => el.dataset.tog);
+    Object.keys(d.targets).forEach((id) => {
+      expect(d.enabled[id]).toBe(true);
+      expect(tgts).toContain(id);
+      expect(togs).toContain(id);
+    });
+  });
+
+  it("CSVと週報データに新項目が入る", () => {
+    const f = boot().window.__flourish;
+    const d = f.defaultData();
+    d.entries["2026-08-08"] = { sauna: true, steps: 2, sober: false, mealB: true, mealD: false };
+    const [head, row] = f.buildCSV(d).split("\n");
+    ["サウナ", "歩数", "休肝日", "朝食", "昼食", "夕食"].forEach((c) => expect(head).toContain(c));
+    expect(row).toBe("2026-08-08,,,,,,,,,,,,1,1万以上,0,1,,0");
+    const t = f.buildReviewText(d, "2026-08-08");
+    expect(t).toContain("steps=[5千以下,8千前後,1万以上]");
+    expect(t).toContain("休肝日は酒を飲まなかった日");
+    expect(t).toContain('"steps":');
   });
 });

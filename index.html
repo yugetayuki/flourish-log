@@ -121,7 +121,7 @@ svg{display:block}
 <body>
 <div id="wrap">
   <header>
-    <div class="title"><h1>Aubade</h1><span class="eyebrow mono">DAWN&nbsp;LOG&nbsp;·&nbsp;v2.5</span></div>
+    <div class="title"><h1>Aubade</h1><span class="eyebrow mono">DAWN&nbsp;LOG&nbsp;·&nbsp;v2.6</span></div>
     <span id="saveState"></span>
   </header>
   <div id="banner"></div>
@@ -143,6 +143,10 @@ var WAKE_VAL     = [6, 6.5, 7, 7.5, 8.2];
 var WAKE_OPACITY = [.4, .55, .7, .85, 1];
 var SLEEP_OPTS   = ["良","普通","悪"];
 var YT_OPTS      = ["<30分","〜1h","〜2h","2h超"];
+// 推移タブのY軸目盛りにも使い回すので、左余白(44px)に収まる短さにしてある
+var STEP_OPTS    = ["5千以下","8千前後","1万以上"];
+// 食べるたびに1タップする項目。3回ぶんは entries に個別に持ち、達成は日単位(meal)へ畳む
+var MEALS = [{id:"mealB", label:"朝食"},{id:"mealL", label:"昼食"},{id:"mealD", label:"夕食"}];
 var TREND_OPTS   = [28, 90];
 var WDAY = ["月","火","水","木","金","土","日"];
 var CORE = [
@@ -154,6 +158,11 @@ var CORE = [
   {id:"weight", label:"体重測定"},
   {id:"gym", label:"ジム"},
   {id:"study", label:"勉強"},
+  {id:"sauna", label:"サウナ"},
+  {id:"steps", label:"歩数"},
+  // 「飲んだ」を達成にすると週タブの「◯/◯」が逆さに読めるので、飲まなかった日を数える向きで持つ
+  {id:"sober", label:"休肝日"},
+  {id:"meal", label:"食事の節制"},
 ];
 
 /* ================= 日付 ================= */
@@ -168,10 +177,10 @@ function md(s){ return (+s.slice(5,7))+"/"+(+s.slice(8,10)); }
 /* ================= データ ================= */
 function defaultData(){
   return {
-    version: 4,
-    targets: {bedtime:5, youtube:5, ashwagandha:6, coffee:6, creatine:6, weight:5, gym:3, study:5},
-    th: {bedtime:2, youtube:1},
-    enabled: {bedtime:true, wake:true, sleepFeel:true, youtube:true, ashwagandha:true, coffee:true, creatine:true, weight:true, gym:true, study:true},
+    version: 5,
+    targets: {bedtime:5, youtube:5, ashwagandha:6, coffee:6, creatine:6, weight:5, gym:3, study:5, sauna:2, steps:5, sober:4, meal:5},
+    th: {bedtime:2, youtube:1, steps:1},
+    enabled: {bedtime:true, wake:true, sleepFeel:true, youtube:true, ashwagandha:true, coffee:true, creatine:true, weight:true, gym:true, study:true, sauna:true, steps:true, sober:true, meal:true},
     custom: [],
     entries: {},
     lastBackup: null,
@@ -194,9 +203,10 @@ function normCustom(list){
 function migrate(d){
   var b = defaultData();
   var o = Object.assign({}, b, isPlainObject(d) ? d : {});
-  // v3 で lastBackup、v4 で起床時刻(wake)と朝コーヒー(coffee)を追加。
+  // v3 で lastBackup、v4 で起床時刻(wake)と朝コーヒー(coffee)、
+  // v5 でサウナ・歩数・休肝日・食事の節制を追加。
   // いずれも欠損は既定値で埋まるので値の変換は要らない
-  o.version = 4;
+  o.version = 5;
   o.lastBackup = (d && typeof d.lastBackup === "string") ? d.lastBackup : null;
   o.targets = Object.assign({}, b.targets, isPlainObject(d && d.targets) ? d.targets : {});
   o.th = Object.assign({}, b.th, isPlainObject(d && d.th) ? d.th : {});
@@ -207,8 +217,15 @@ function migrate(d){
 }
 function achieved(data, e, id){
   if (!e) return null;
+  // 達成の向きは項目ごとに違う。就寝・YouTube は小さいほど良く、歩数は大きいほど良い
   if (id === "bedtime") return e.bedtime == null ? null : e.bedtime <= data.th.bedtime;
   if (id === "youtube") return e.youtube == null ? null : e.youtube <= data.th.youtube;
+  if (id === "steps") return e.steps == null ? null : e.steps >= data.th.steps;
+  // 食事は3回ぶんの入力を1日の達成に畳む。記録しなかった食事は失敗ではないので分母に入れない
+  if (id === "meal") {
+    var vs = MEALS.map(function(m){ return e[m.id]; }).filter(function(x){ return x != null; });
+    return vs.length === 0 ? null : vs.every(function(x){ return x === true; });
+  }
   var v = e[id];
   return v == null ? null : v === true;
 }
@@ -248,7 +265,8 @@ function weekStats(data, ws, today){
   }
   var logged = days.filter(function(dt){ return dt<=today && data.entries[dt]; }).length;
   return {range: md(days[0])+"–"+md(days[6]), logged:logged, items:per,
-    bedtime:dist("bedtime",5), wake:dist("wake",5), sleepFeel:dist("sleepFeel",3), youtube:dist("youtube",4)};
+    bedtime:dist("bedtime",5), wake:dist("wake",5), sleepFeel:dist("sleepFeel",3),
+    youtube:dist("youtube",4), steps:dist("steps",3)};
 }
 // カスタム項目のラベルは自由入力なので、カンマ/引用符/改行で列がずれないよう RFC4180 で囲う
 function csvCell(v){
@@ -256,7 +274,8 @@ function csvCell(v){
   return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g,'""') + '"' : s;
 }
 function buildCSV(data){
-  var cols=["date","就寝時刻","起床時刻","眠れた感","YouTube","アシュワガンダ","朝コーヒー","クレアチン","体重測定","体重","ジム","勉強"]
+  var cols=["date","就寝時刻","起床時刻","眠れた感","YouTube","アシュワガンダ","朝コーヒー","クレアチン","体重測定","体重","ジム","勉強","サウナ","歩数","休肝日"]
+    .concat(MEALS.map(function(m){return m.label;}))
     .concat(data.custom.map(function(c){return c.label;}));
   function b(v){ return v==null ? "" : v===true ? 1 : v===false ? 0 : v; }
   var lines=[cols.map(csvCell).join(",")];
@@ -267,7 +286,9 @@ function buildCSV(data){
       e.wake!=null?WAKE_OPTS[e.wake]:"",
       e.sleepFeel!=null?SLEEP_OPTS[e.sleepFeel]:"",
       e.youtube!=null?YT_OPTS[e.youtube]:"",
-      b(e.ashwagandha), b(e.coffee), b(e.creatine), b(e.weight), e.weightVal!=null?e.weightVal:"", b(e.gym), b(e.study)]
+      b(e.ashwagandha), b(e.coffee), b(e.creatine), b(e.weight), e.weightVal!=null?e.weightVal:"", b(e.gym), b(e.study),
+      b(e.sauna), e.steps!=null?STEP_OPTS[e.steps]:"", b(e.sober)]
+      .concat(MEALS.map(function(m){return b(e[m.id]);}))
       .concat(data.custom.map(function(c){return b(e[c.id]);}));
     lines.push(row.map(csvCell).join(","));
   });
@@ -279,8 +300,9 @@ function buildReviewText(data, today){
   var p = weekStats(data, addDays(ws,-7), today);
   return "【Aubade 週報データ " + s.range + "】\n"
     + "以下のデータで週次レビューを書いてください。形式: 【事実】3行以内 / 【解釈】2行以内(推測と明示) / 【来週の一点】1つだけ具体的に。責めない・説教しない・淡々と。環境設計(摩擦の調整)の観点で提案。\n"
-    + "凡例: bedtime=[〜23:00,〜23:30,〜24:00,〜24:30,以降] wake=[〜6:00,〜6:30,〜7:00,〜7:30,以降] sleepFeel=[良,普通,悪] youtube=[<30分,〜1h,〜2h,2h超]\n"
+    + "凡例: bedtime=["+BEDTIME_OPTS.join(",")+"] wake=["+WAKE_OPTS.join(",")+"] sleepFeel=["+SLEEP_OPTS.join(",")+"] youtube=["+YT_OPTS.join(",")+"] steps=["+STEP_OPTS.join(",")+"]\n"
     + "wake(起床時刻)は計測のみで、達成判定の対象ではありません。\n"
+    + "休肝日は酒を飲まなかった日、食事の節制は記録した食事がすべて節制だった日を達成として数えています。\n"
     + "今週: " + JSON.stringify(s) + "\n前週: " + JSON.stringify(p);
 }
 
@@ -406,13 +428,17 @@ function seg(f, opts, val, colors){
   });
   return h + '</div>';
 }
-function pairBtn(f, val){
-  function b(v, lab){
+// 休肝日のように「した/しなかった」では意味が通らない項目があるので、ラベルだけ差し替えられるようにする。
+// 達成側(✓)は常に data-v="t" なので、色と達成判定の向きは項目によらず一定に保てる
+function pairBtn(f, val, lab){
+  lab = lab || {};
+  function b(v, text){
     var on = val === (v==="t");
     var cls = v==="t" ? "on-pine" : "on-gray";
-    return '<button class="sb'+(on?' on '+cls:'')+'" data-f="'+esc(f)+'" data-v="'+v+'" aria-pressed="'+on+'">'+lab+'</button>';
+    return '<button class="sb'+(on?' on '+cls:'')+'" data-f="'+esc(f)+'" data-v="'+v+'" aria-pressed="'+on+'">'+text+'</button>';
   }
-  return '<div class="seg" style="grid-template-columns:1fr 1fr">'+b("t","✓ した")+b("f","✗ しなかった")+'</div>';
+  return '<div class="seg" style="grid-template-columns:1fr 1fr">'
+    + b("t", lab.t || "✓ した") + b("f", lab.f || "✗ しなかった") + '</div>';
 }
 function row(label, sub, inner){
   return '<div class="row"><div class="rowhead"><span class="lbl">'+esc(label)+'</span>'
@@ -436,6 +462,10 @@ function viewLog(today){
   if (en.weight) fields.push(e.weight!=null);
   if (en.gym) fields.push(e.gym!=null);
   if (en.study) fields.push(e.study!=null);
+  if (en.sauna) fields.push(e.sauna!=null);
+  if (en.steps) fields.push(e.steps!=null);
+  if (en.sober) fields.push(e.sober!=null);
+  if (en.meal) MEALS.forEach(function(m){ fields.push(e[m.id]!=null); });
   S.custom.forEach(function(c){ fields.push(e[c.id]!=null); });
   var done = fields.filter(Boolean).length;
 
@@ -475,10 +505,27 @@ function viewLog(today){
   var y = '';
   if (en.youtube) y += row("YouTube","スクリーンタイムを転記",
     seg("youtube", YT_OPTS, e.youtube!=null?e.youtube:null, ["on-pine","on-pine","on-sienna","on-sienna"]));
+  // 既定の達成ライン(th.steps=1)に合わせて、達成側を pine・未達側を sienna にしてある
+  if (en.steps) y += row("歩数","スマホの計測値を転記",
+    seg("steps", STEP_OPTS, e.steps!=null?e.steps:null, ["on-sienna","on-pine","on-pine"]));
   if (en.gym) y += row("ジム","", pairBtn("gym", e.gym!=null?e.gym:null));
+  if (en.sauna) y += row("サウナ","", pairBtn("sauna", e.sauna!=null?e.sauna:null));
   if (en.study) y += row("勉強","15分以上で達成", pairBtn("study", e.study!=null?e.study:null));
+  if (en.sober) y += row("休肝日","前日に酒を飲んだか",
+    pairBtn("sober", e.sober!=null?e.sober:null, {t:"✓ 飲まなかった", f:"✗ 飲んだ"}));
   S.custom.forEach(function(c){ y += row(c.label,"", pairBtn(c.id, e[c.id]!=null?e[c.id]:null)); });
   h += '<div class="card"><div class="chead"><span class="ctitle">昨日</span></div>'+y+'</div>';
+
+  // 他のカードと違い朝には埋まらない。食べたその場で1タップする想定なので、指す時点も当日
+  if (en.meal) {
+    var ml = '';
+    MEALS.forEach(function(m){
+      ml += row(m.label,"", pairBtn(m.id, e[m.id]!=null?e[m.id]:null, {t:"✓ 節制した", f:"✗ しなかった"}));
+    });
+    h += '<div class="card"><div class="chead"><span class="ctitle">今日の食事</span></div>'+ml+'</div>'
+      + '<p class="foot">ジャンクフードと飲み会がなければ「節制した」。食べるたびに1タップで、'
+      + '記録した食事がすべて節制ならその日は達成です(記録しなかった食事は数えません)。</p>';
+  }
 
   h += '<p class="foot">欠損は失敗ではありません。1日抜けても習慣形成には実質影響しない、が実証の示すところです。</p>';
   return h;
@@ -651,6 +698,7 @@ function viewTrend(today){
       // 帯グラフでは就寝と同じ時刻軸に載せるので、翌朝であることを +24 で表す
       wakeAbs: e.wake!=null ? WAKE_VAL[e.wake]+24 : null,
       yt: e.youtube!=null ? e.youtube : null,
+      steps: e.steps!=null ? e.steps : null,
       w: (e.weightVal!=null && e.weightVal!=="" && isFinite(wn)) ? wn : null});
   }
   var lab = "(" + trendDays + "日)";
@@ -682,6 +730,9 @@ function viewTrend(today){
 
   h += '<div class="card"><div class="chead"><span class="ctitle">YouTube'+lab+'</span></div><div class="chartbox">'
     + svgChart(rows,"yt",-0.2,3.2,ytT,S.th.youtube,"#A9663B") + '</div></div>';
+  var stT=STEP_OPTS.map(function(o,i){return {v:i,l:o};});
+  h += '<div class="card"><div class="chead"><span class="ctitle">歩数'+lab+'</span></div><div class="chartbox">'
+    + svgChart(rows,"steps",-0.2,2.2,stT,S.th.steps,"#3E6B4F") + '</div></div>';
   var ws = rows.filter(function(r){return r.w!=null;}).map(function(r){return r.w;});
   if (ws.length) {
     var mn=Math.min.apply(null,ws)-0.5, mx=Math.max.apply(null,ws)+0.5;
@@ -731,6 +782,10 @@ function viewReview(today){
       {l:"就寝が達成ライン内 × 起床が〜6:30以内", ps:mk(function(e){return e.bedtime==null?null:e.bedtime<=S.th.bedtime;}, function(e){return e.wake==null?null:e.wake<=1;})},
       {l:"ジムをした × 眠れた感「良」", ps:mk(function(e){return e.gym==null?null:e.gym===true;}, function(e){return e.sleepFeel==null?null:e.sleepFeel===0;})},
       {l:"勉強した × YouTube多め", ps:mk(function(e){return e.study==null?null:e.study===true;}, function(e){return e.youtube==null?null:e.youtube>=2;})},
+      // 休肝日・サウナ・歩数はいずれも前日を指すので、当朝の眠れた感とは同じ一夜を挟んで並ぶ
+      {l:"前日に酒を飲んだ × 眠れた感「良」", ps:mk(function(e){return e.sober==null?null:e.sober===false;}, function(e){return e.sleepFeel==null?null:e.sleepFeel===0;})},
+      {l:"サウナに入った × 眠れた感「良」", ps:mk(function(e){return e.sauna==null?null:e.sauna===true;}, function(e){return e.sleepFeel==null?null:e.sleepFeel===0;})},
+      {l:"歩数が達成ライン以上 × 眠れた感「良」", ps:mk(function(e){return e.steps==null?null:e.steps>=S.th.steps;}, function(e){return e.sleepFeel==null?null:e.sleepFeel===0;})},
     ];
     var res = defs.filter(function(x){return x.ps.length>=14;})
       .map(function(x){return {l:x.l, n:x.ps.length, v:phi(x.ps)};})
@@ -779,10 +834,14 @@ function viewSettings(){
   h += '</select></div>';
   h += '<div class="srow"><span style="font-size:14px">YouTube</span><select data-th="youtube">';
   YT_OPTS.slice(0,3).forEach(function(o,i){ h += '<option value="'+i+'"'+(S.th.youtube===i?' selected':'')+'>'+esc(o)+' 以内</option>'; });
+  h += '</select></div>';
+  // 歩数だけは「以上で達成」の向き。最下段を選べるようにすると全ての日が達成になるので出さない
+  h += '<div class="srow"><span style="font-size:14px">歩数</span><select data-th="steps">';
+  STEP_OPTS.slice(1).forEach(function(o,i){ h += '<option value="'+(i+1)+'"'+(S.th.steps===i+1?' selected':'')+'>'+esc(o)+' から達成</option>'; });
   h += '</select></div></div>';
 
   h += '<div class="card"><div class="chead"><span class="ctitle">表示する項目</span></div>';
-  var togs=[["bedtime","就寝時刻"],["wake","起床時刻"],["sleepFeel","眠れた感"],["youtube","YouTube"],["ashwagandha","アシュワガンダ"],["coffee","朝コーヒー"],["creatine","クレアチン"],["weight","体重測定"],["gym","ジム"],["study","勉強"]];
+  var togs=[["bedtime","就寝時刻"],["wake","起床時刻"],["sleepFeel","眠れた感"],["youtube","YouTube"],["ashwagandha","アシュワガンダ"],["coffee","朝コーヒー"],["creatine","クレアチン"],["weight","体重測定"],["gym","ジム"],["study","勉強"],["sauna","サウナ"],["steps","歩数"],["sober","休肝日"],["meal","食事の節制"]];
   togs.forEach(function(t){
     var on = S.enabled[t[0]] !== false;
     h += '<div class="srow"><span style="font-size:14px">'+t[1]+'</span>'
@@ -834,7 +893,7 @@ function viewSettings(){
   h += '</div></div>';
 
   h += '<p class="foot">データはこの端末のブラウザ(このアプリ)内にのみ保存されます。バックアップはJSONコピーで。'
-    + 'このアプリの役割は計測と週次フィードバックまで — 行動を変えるのは環境設計の仕事です。 v2.5</p>';
+    + 'このアプリの役割は計測と週次フィードバックまで — 行動を変えるのは環境設計の仕事です。 v2.6</p>';
   return h;
 }
 
