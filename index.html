@@ -493,7 +493,7 @@ function syncPush(){
   if (typeof fetch !== "function") {
     console.error("[flourish] この環境には fetch がありません");
     syncNote = {ok:false, msg:"この端末では同期できません"};
-    if (tab === "settings") render();
+    showSyncNote();
     return;
   }
   fetch(syncCfg.url, {
@@ -510,8 +510,7 @@ function syncPush(){
     S.lastBackup = syncCfg.last;
     persistQuiet();
     syncNote = {ok:true, msg:"同期しました"};
-    // 朝の入力中に画面を作り直すと入力位置が飛ぶので、設定タブを見ているときだけ描き直す
-    if (tab === "settings") render();
+    showSyncNote();
   }, syncFailed);
 }
 // PCが落ちている・tailnet に繋がっていないのは日常的に起きる。記録は端末に残るので
@@ -519,7 +518,15 @@ function syncPush(){
 function syncFailed(e){
   console.error("[flourish] 同期できませんでした", e);
   syncNote = {ok:false, msg:"同期できませんでした(記録は端末に残っています)"};
-  if (tab === "settings") render();
+  showSyncNote();
+}
+// 全再描画にすると、設定タブで書きかけの取り込みJSON・カスタム項目名・トークンが消える。
+// 同期の結果は1行だけなので、その要素だけ差し替える
+function showSyncNote(){
+  if (tab !== "settings") return;
+  var el = document.getElementById("syncline");
+  if (!el) { render(); return; }
+  el.outerHTML = syncLine();
 }
 
 function copyText(t, done){
@@ -1064,6 +1071,11 @@ function syncToday(){
   if (sel === lastToday) sel = today;
   render();
 }
+// 4秒の待ちの途中で閉じられると、その回は送られない。次に開けば全履歴で追いつくが、
+// 「その日のうちにPCへ届く」確率を上げるため、隠れる直前に保留分を流す
+document.addEventListener("visibilitychange", function(){
+  if (document.visibilityState === "hidden" && syncTimer) syncPush();
+});
 document.addEventListener("visibilitychange", function(){
   if (document.visibilityState === "visible") syncToday();
 });
@@ -1176,6 +1188,12 @@ document.addEventListener("click", function(ev){
     render(); return;
   }
   if (a === "reset2") {
+    // 送信先を残したまま消すと、空になった全履歴がそのままPCへ送られて向こうの控えまで巻き添えになる。
+    // 「すべてのデータを削除」は同期の設定も含めて消す
+    clearTimeout(syncTimer);
+    syncCfg = {url:"", token:"", last:null};
+    saveSync();
+    syncNote = null;
     S = defaultData(); armed = false; save(); render(); return;
   }
 });
@@ -1202,7 +1220,13 @@ document.addEventListener("change", function(ev){
     syncCfg.url = u; saveSync(); syncNote = null; render(); return;
   }
   if (t.id === "syncToken") {
-    syncCfg.token = (t.value || "").trim(); saveSync(); syncNote = null; render(); return;
+    var tok = (t.value || "").trim();
+    // 受信側は32文字未満を拒む。ここで弾かないと「毎回401」を理由不明のまま繰り返す
+    if (tok !== "" && tok.length < 32) {
+      syncNote = {ok:false, msg:"トークンが短すぎます(32文字以上)。貼り付けが途中で切れていませんか"};
+      render(); return;
+    }
+    syncCfg.token = tok; saveSync(); syncNote = null; render(); return;
   }
   var th = t.closest("[data-th]");
   if (th) { S.th[th.dataset.th] = +t.value; save(); render(); return; }

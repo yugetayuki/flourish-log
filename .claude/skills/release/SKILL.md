@@ -4,7 +4,7 @@ description: Aubade を GitHub Pages へリリースする。テストとスモ�
 when_to_use: 「リリースして」「デプロイして」「公開して」「バージョンを上げて」と言われたとき
 ---
 
-出荷物は `index.html` 単体。`main` に push すると GitHub Pages が数分で反映する。
+出荷物は `index.html` と `sw.js` の2本。`main` に push すると GitHub Pages が数分で反映する。
 
 ## 手順
 
@@ -13,7 +13,7 @@ when_to_use: 「リリースして」「デプロイして」「公開して」�
    npm test        # vitest
    npm run smoke   # 実ブラウザ(Chromium)
    ```
-2. **バージョン表記を5箇所すべて上げる。** 1つでも食い違うと実機で反映確認ができなくなる。
+2. **下の一覧の版表記をすべて上げる（4ファイル）。** 1つでも食い違うと実機で反映確認ができなくなる。
    - `index.html` のヘッダー eyebrow（`DAWN LOG · vX.Y`）
    - `index.html` 設定タブ末尾の `.foot` 内の版表記
    - `package.json` の `version`

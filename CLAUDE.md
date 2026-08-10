@@ -4,7 +4,7 @@
 Claude.ai チャット上で要件定義〜v2.0まで開発された。本書は Claude Code への引き継ぎ資料。
 
 - 最終更新: 2026-08-10 / 現行バージョン: **v2.9**(`index.html` 内 eyebrow 表記と一致させること)
-- テスト: `npm install && npm test`(vitest 119本 + 実ブラウザ smoke 25項目、全パス)
+- テスト: `npm install && npm test`(vitest 125本 + 実ブラウザ smoke 25項目、全パス)
 
 ### 名前について(v2.3で改称)
 
@@ -112,7 +112,9 @@ Claude.ai チャット上で要件定義〜v2.0まで開発された。本書は
 ### 不変条件・約束事
 - **`migrate()` が後方互換の要。** スキーマ変更時は必ず `migrate()` を拡張し `version` を上げる。
   既存ユーザーデータ(JSON取り込み経由の旧データ含む)が壊れないことをテストで保証すること。
-- **`window.__flourish` テストフックを削除しない。** テストが依存(getS/setS/achieved/phi/buildCSV/weekStats/defaultData/migrate/fmt/weekStart/buildReviewText/KEY/save/render/brokenKeys/BROKEN_PREFIX/syncToday)。
+- **`window.__flourish` テストフックを削除しない。** `pwa.test.js` が依存している。
+  **一覧の真実は `index.html` の `window.__flourish` リテラル**で、ここには書き写さない
+  (書き写すと増えたときに必ず腐る)。削除・改名するときは同時に `pwa.test.js` を見ること。
 - 達成判定は `achieved(data, entry, id)` に一元化。週集計は `weekStats()`。φ係数は `phi()`(分母0は0を返す)。
 - 週の起点は月曜(`monIdx`)。日付キーはローカルタイム `YYYY-MM-DD`。
 - **保存データを読めなかったとき、原本を消さない(v2.1)。** `load()` は JSON.parse に失敗したら
@@ -197,7 +199,7 @@ Claude.ai チャット上で要件定義〜v2.0まで開発された。本書は
 
 ```bash
 npm install
-npm test        # vitest 119本。ロジックとDOM操作
+npm test        # vitest 125本。ロジックとDOM操作
 npm run smoke   # 実ブラウザ(Chromium) 25項目。描画・保存・CSP・Service Workerの実効性
 ```
 
@@ -263,6 +265,12 @@ v2.7 までは「外へ出ないこと」だったが、v2.8 でオーナー自�
   書き込みを防ぐこと(＝GitHubアカウントの保護)が唯一の防御。**`sw.js` に他オリジンへの通信を足さないこと。**
 - **サイトそのものの閲覧制限。** Pages はURLを知れば誰でも開ける。private リポジトリにしても
   サイトは公開されたままで、アクセス制御は GitHub Enterprise Cloud 限定。開いても中身は空なので許容している。
+- **同一オリジンに置かれた別ページ。** GitHub Pages のプロジェクトページはパスで分かれていても
+  オリジンは `https://yugetayuki.github.io` で共通。同じアカウントで別リポジトリを Pages 公開すると、
+  そのページのスクリプトから `flourish-log-v2`(記録)と `flourish-log-v2-sync`(送信先とトークン)が
+  素通しで読め、受信側の許可オリジンもオリジン単位なので直接 POST もできる。
+  **このオリジンは Aubade 専用に保つこと。** 他のページを置くなら、独立したサブドメインへ移すか、
+  トークンを再発行して受信側の許可オリジンを変える。
 - **端末を他人が操作した場合。** 端末のロックが唯一の防御。
 - **週報コピー→チャット貼り付け。** オーナーが能動的に外部へ出す動線であり、設計どおり。
 - **tailnet の中にいる他の端末。** `*.ts.net` を許可した以上、tailnet 上の別ホストを
@@ -321,7 +329,7 @@ v2.0に至るまでに以下を検証して破棄した。同じ穴を掘り直�
 
 ```bash
 npm install
-npm test        # 119 passed
+npm test        # 125 passed
 npm run smoke   # 25/25 passed
 ```
 

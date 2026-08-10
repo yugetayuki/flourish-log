@@ -22,7 +22,11 @@ tools: Read, Grep, Glob, Bash
 - **「眠れた感」が目標化されていないか。** 達成判定や目標値の対象になっていないか。
 - **相関ヒントの28日ロックが緩んでいないか。**
 - **外部通信が増えていないか。** `fetch` / `XMLHttpRequest` / `sendBeacon` / `WebSocket` /
-  外部URLの `src`・`href`。1本でも増えれば CSP に阻まれ、テストも落ちる。
+  外部URLの `src`・`href`。通信は `syncPush()` の fetch 1本だけ。CSP は `connect-src https://*.ts.net` を許可しているので、
+  **ts.net 宛の2本目は CSP では止まらない**。止めているのは pwa.test.js の
+  「index.html の通信は同期の1本だけで、送信先はハードコードされていない」(fetch の出現回数を1に固定)
+  だけなので、通信を増やす変更は必ず報告すること。
+  `XMLHttpRequest` / `WebSocket` / `sendBeacon` / 外部URLの `src`・`href` は引き続き全面禁止。
 
 ## 報告の形
 

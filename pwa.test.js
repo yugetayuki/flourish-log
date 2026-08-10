@@ -1430,3 +1430,96 @@ describe("PWA v2.9: PCへの同期(任意)", () => {
     expect(q(dom, "#syncline").textContent).toContain("この端末では同期できません");
   });
 });
+
+describe("PWA v2.9: 同期の取り扱いを壊さない", () => {
+  const SYNC_KEY = "flourish-log-v2-sync";
+  const URL_OK = "https://pc.example-tailnet.ts.net/aubade";
+  const stubFetch = (dom, impl) => {
+    const calls = [];
+    dom.window.fetch = (url, init) => { calls.push({ url, init }); return impl(url, init); };
+    return calls;
+  };
+  const ok = () => Promise.resolve({ ok: true, status: 200 });
+  const setField = (dom, id, v) => {
+    const el = q(dom, "#" + id);
+    el.value = v;
+    el.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
+  };
+  const configure = (dom) => {
+    byText(dom, "button.tb", "設定").click();
+    setField(dom, "syncUrl", URL_OK);
+    setField(dom, "syncToken", "t".repeat(32));
+    return dom.window.__flourish;
+  };
+
+  // 受信側は32文字未満を拒む。ここで通すと「毎回401」を理由不明のまま繰り返す
+  it("短すぎるトークンは保存せず、理由を出す", () => {
+    const dom = boot();
+    byText(dom, "button.tb", "設定").click();
+    setField(dom, "syncUrl", URL_OK);
+    setField(dom, "syncToken", "short");
+    expect(q(dom, "#syncline").textContent).toContain("32文字以上");
+    expect(dom.window.__flourish.getSync().token).toBe("");
+  });
+
+  // 全再描画にすると、書きかけの取り込みJSONやカスタム項目名まで消える
+  it("同期の結果表示が、設定タブの書きかけ入力を消さない", async () => {
+    const dom = boot();
+    stubFetch(dom, ok);
+    const f = configure(dom);
+    q(dom, "#imp").value = '{"書きかけ": true}';
+    q(dom, "#newLabel").value = "読書";
+    f.syncPush();
+    await tick();
+    expect(q(dom, "#syncline").textContent).toContain("同期しました");
+    expect(q(dom, "#imp").value).toBe('{"書きかけ": true}');
+    expect(q(dom, "#newLabel").value).toBe("読書");
+  });
+
+  // 送信先を残したまま消すと、空の全履歴がPCへ送られて向こうの控えまで巻き添えになる
+  it("すべてのデータを削除すると、同期の設定も消える", () => {
+    const dom = boot();
+    const f = configure(dom);
+    expect(f.getSync().url).toBe(URL_OK);
+    byText(dom, "button.danger", "すべてのデータを削除…").click();
+    byText(dom, "button.danger", "本当に削除する(取り消せません)").click();
+    expect(f.getSync().url).toBe("");
+    expect(f.getSync().token).toBe("");
+    expect(JSON.parse(dom.window.localStorage.getItem(SYNC_KEY)).url).toBe("");
+  });
+
+  it("削除後は何も送らない", async () => {
+    const dom = boot();
+    const calls = stubFetch(dom, ok);
+    const f = configure(dom);
+    byText(dom, "button.danger", "すべてのデータを削除…").click();
+    byText(dom, "button.danger", "本当に削除する(取り消せません)").click();
+    f.syncPush();
+    await tick();
+    expect(calls.length).toBe(0);
+  });
+
+  // 4秒の待ちの途中で閉じられると、その回は送られないまま終わる
+  it("画面が隠れるとき、保留中の同期を流す", async () => {
+    const dom = boot();
+    const calls = stubFetch(dom, ok);
+    configure(dom);
+    byText(dom, "button.tb", "記録").click();
+    byText(dom, "button.sb", "✓ した").click();
+    expect(calls.length).toBe(0);
+    Object.defineProperty(dom.window.document, "visibilityState", { value: "hidden", configurable: true });
+    dom.window.document.dispatchEvent(new dom.window.Event("visibilitychange"));
+    await tick();
+    expect(calls.length).toBe(1);
+  });
+
+  it("保留が無いときは隠れても送らない", async () => {
+    const dom = boot();
+    const calls = stubFetch(dom, ok);
+    configure(dom);
+    Object.defineProperty(dom.window.document, "visibilityState", { value: "hidden", configurable: true });
+    dom.window.document.dispatchEvent(new dom.window.Event("visibilitychange"));
+    await tick();
+    expect(calls.length).toBe(0);
+  });
+});
