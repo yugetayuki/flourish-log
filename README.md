@@ -32,23 +32,30 @@ Claude に貼り付けると、【事実】【解釈】【来週の一点】の�
 
 ## プライバシー
 
-- 記録は端末のブラウザ内（`localStorage`）にのみ存在し、どこにも送信されません
-- アプリは外部通信のコードを1行も持たず、CSP（`connect-src 'none'` ほか）でも遮断しています
+- 記録は端末のブラウザ内（`localStorage`）に保存されます
+- **送信先は「オーナー自身のPC」1つだけ**です（v2.8 で追加。設定タブで送信先とトークンを
+  入れたときにだけ働き、既定は空欄＝何も送りません）。送り先は Tailscale の `*.ts.net` に
+  限られ、CSP（`connect-src https://*.ts.net`）がそれ以外への通信を遮断します
+- それ以外の外部送信はありません。fetch は同期の1本だけで、`XMLHttpRequest` /
+  `WebSocket` / `sendBeacon` は使っていません。実ブラウザのテストで
+  「許可した宛先以外へは0件しか届かない」ことを毎回確認しています
+- 送信先URLとトークンはコードに書かれておらず、このリポジトリにも含まれません
 - このリポジトリに実データは一切含まれません
 
 サイト自体は URL を知っていれば誰でも開けますが、開いても中身は空のアプリです。
 
 ## 技術
 
-- 単一ファイル（`index.html`）の vanilla JS + インラインCSS + インラインSVG。
-  フレームワーク・CDN・ビルド工程なし（オフライン耐性と検証容易性のための選択）
+- 出荷物は `index.html` と `sw.js` の2本だけ。vanilla JS + インラインCSS + インラインSVG。
+  フレームワーク・CDN・ビルド工程なし（オフライン耐性と検証容易性のための選択）。
+  `sw.js` は Service Worker が別ファイルでしか登録できない仕様上の分割
 - 保存: `localStorage`、即時書き込み
 - ホスティング: GitHub Pages（`main` の `/`）
 
 ```bash
 npm install
-npm test        # vitest 50本 — 実HTMLをJSDOMで起動して操作する
-npm run smoke   # 実ブラウザ(Chromium) 14項目 — 描画・保存・CSPの実効性
+npm test        # 実HTMLをJSDOMで起動して操作する（本数は pwa.test.js が正）
+npm run smoke   # 実ブラウザ(Chromium) — 描画・保存・CSP・Service Worker の実効性
 ```
 
 設計判断の背景、不変条件、バックログ、「再訪禁止リスト」は [CLAUDE.md](CLAUDE.md) にまとめてあります。

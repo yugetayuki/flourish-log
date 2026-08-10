@@ -4,7 +4,8 @@
 <meta charset="utf-8">
 <!-- 送信先を1種類に絞ってブラウザ側にも宣言する。
      connect-src は *.ts.net だけ。ここはオーナー自身のPCへ写しを送るための Tailscale の
-     ドメインで、tailnet に参加している端末からしか到達できない(インターネットからは引けない)。
+     ドメインで、通常は tailnet に参加している端末からしか到達できない
+     (Funnel を有効にしたホストは例外。詳しくは CLAUDE.md の脅威モデル)。
      具体的なホスト名を書かないのは、このリポジトリが Public だから。ワイルドカードでも
      許されるのは Tailscale 内部のホストだけなので、持ち出し先としては使えない。
      インラインの script/style は本アプリの本体なので 'unsafe-inline' は外せない。
@@ -1019,7 +1020,9 @@ function viewSettings(){
   // 画面に平文で出したままにしない。localStorage に入っている事実は変わらないが、肩越しには見えない
   h += '<input class="wv mono" id="syncToken" type="password" placeholder="トークン" value="'+esc(syncCfg.token)+'">';
   h += syncLine();
-  h += '<button class="ghost" style="margin-top:6px" data-action="syncnow"'+(syncReady()?'':' disabled style="margin-top:6px;color:var(--dim)"')+'>いま送る</button>';
+  // style を2つ書くと後ろが無視され、押せないボタンが押せるように見える。1つにまとめる
+  h += '<button class="ghost" style="margin-top:6px'+(syncReady()?'':';color:var(--dim)')+'" data-action="syncnow"'
+    + (syncReady()?'':' disabled')+'>いま送る</button>';
   h += '</div>';
 
   h += '<div class="card"><div class="chead"><span class="ctitle">初期化</span></div><div style="padding:8px 0">';

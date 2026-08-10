@@ -1217,6 +1217,31 @@ describe("PWA v2.8: PCへの同期(任意)", () => {
     return calls;
   };
   const ok = () => Promise.resolve({ ok: true, status: 200 });
+  // JSDOM の setTimeout をそのまま待つと4秒かかる。差し替えて任意に進める。
+  // アプリがタイマーを積む前に仕込まないと本物の setTimeout が使われるので、
+  // クリックより先に useFakeTimers を呼ぶこと
+  const useFakeTimers = (dom) => {
+    const w = dom.window;
+    w.__timers = [];
+    w.__now = 0;
+    const realSet = w.setTimeout;
+    w.setTimeout = (fn, delay) => {
+      if (typeof delay !== "number" || delay < 50) return realSet(fn, delay);
+      return "fake:" + (w.__timers.push({ fn, at: w.__now + delay }) - 1);
+    };
+    w.clearTimeout = (id) => {
+      if (typeof id === "string" && id.startsWith("fake:")) w.__timers[+id.slice(5)] = null;
+    };
+  };
+  const advance = async (dom, ms) => {
+    const w = dom.window;
+    w.__now += ms;
+    for (let i = 0; i < w.__timers.length; i++) {
+      const t = w.__timers[i];
+      if (t && t.at <= w.__now) { w.__timers[i] = null; t.fn(); }
+    }
+    await tick();
+  };
   const configure = (dom, url, token) => {
     const f = dom.window.__flourish;
     byText(dom, "button.tb", "設定").click();
@@ -1331,6 +1356,38 @@ describe("PWA v2.8: PCへの同期(任意)", () => {
     el.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
     expect(q(dom, "#syncline").textContent).toContain("ts.net");
     expect(dom.window.localStorage.getItem(SYNC_KEY) || "").not.toContain("evil");
+  });
+
+  // save() から scheduleSync() が落ちても、syncPush を直接叩くテストは全部緑のまま通る。
+  // 自動同期は iOS PWA では唯一の送信経路なので、結線そのものを縛る
+  it("保存すると、待ち時間のあとに実際に送られる", async () => {
+    const dom = boot();
+    const calls = stubFetch(dom, ok);
+    configure(dom, URL_OK, "t".repeat(32));
+    useFakeTimers(dom);
+    byText(dom, "button.tb", "記録").click();
+    byText(dom, "button.sb", "✓ した").click();
+    expect(calls.length).toBe(0);
+    await advance(dom, 4000);
+    expect(calls.length).toBe(1);
+    expect(calls[0].url).toBe(URL_OK);
+    const f = dom.window.__flourish;
+    expect(JSON.parse(calls[0].init.body).entries[f.fmt(new Date())].ashwagandha).toBe(true);
+  });
+
+  it("連続タップは1回にまとまる", async () => {
+    const dom = boot();
+    const calls = stubFetch(dom, ok);
+    configure(dom, URL_OK, "t".repeat(32));
+    useFakeTimers(dom);
+    byText(dom, "button.tb", "記録").click();
+    byText(dom, "button.sb", "✓ した").click();
+    await advance(dom, 2000);
+    byText(dom, "button.sb", "〜23:00").click(); // 待ち時間が延びる
+    await advance(dom, 2000);
+    expect(calls.length).toBe(0);
+    await advance(dom, 2000);
+    expect(calls.length).toBe(1);
   });
 
   it("保存のたびに送らず、まとめてから送る", async () => {
