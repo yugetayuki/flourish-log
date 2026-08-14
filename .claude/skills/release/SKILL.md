@@ -20,11 +20,12 @@ when_to_use: 「リリースして」「デプロイして」「公開して」�
    - `package-lock.json` の `version`（先頭とその直下の2箇所）
    - `sw.js` の `CACHE`（`aubade-vX.Y`）。上げないと `activate` の古いキャッシュ掃除が働かない。
      ネットワーク優先なので表示が古くなることはないが、消えないキャッシュが残る
-3. **CLAUDE.md を更新する。** 冒頭の現行バージョン、テスト本数、変更した不変条件。
+3. **CLAUDE.md を更新する。** 冒頭の最終更新日と現行バージョン、変更した不変条件。
+   テスト本数は書かない(腐るので `pwa.test.js` を参照させる)。
 4. **コミットして push する。** メッセージは共通規約の形式に従い、本文に「なぜ」を書く。
 5. **Pages への反映を確認する。**
    ```bash
-   curl -s https://yugetayuki.github.io/flourish-log/ | grep -o 'v2\.[0-9]*' | head -1
+   curl -s https://yugetayuki.github.io/flourish-log/ | grep -o 'v[0-9]*\.[0-9]*' | head -1
    ```
    反映まで数分かかる。古い版が返るあいだは間隔を空けて再確認する。
 6. **オーナーに実機確認を依頼する。** ここから先はこちらでは実行できない。
