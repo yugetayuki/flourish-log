@@ -146,6 +146,8 @@ var WAKE_VAL     = [6, 6.5, 7, 7.5, 8.2];
 // 達成ラインを持たない項目なので、週タブでは達成色/注意色ではなく indigo の濃淡で早い→遅いを示す
 var WAKE_OPACITY = [.4, .55, .7, .85, 1];
 var SLEEP_OPTS   = ["良","普通","悪"];
+// 気分は主観状態で直接コントロールできないので、眠れた感と同じく計測のみ(設計制約6)
+var MOOD_OPTS    = ["高","中","低"];
 var YT_OPTS      = ["<30分","〜1h","〜2h","2h超"];
 // 推移タブのY軸目盛りにも使い回すので、左余白(44px)に収まる短さにしてある
 var STEP_OPTS    = ["3千以下","5千","8千","1万以上"];
@@ -170,6 +172,12 @@ function perDay(id){
 function perDayParts(){
   return PERDAY.reduce(function(a, g){ return a.concat(g.parts); }, []);
 }
+// 1日3回その場でタップする点は PERDAY と同じだが、達成判定を持たない点が違う。
+// PERDAY に入れると畳んだ達成・週目標・週タブの未達行が自動で付いてくるので、別に持つ。
+// 指す時点は PERDAY と同じく当日(記録した朝ではない)
+var MOOD = {id:"mood", label:"今の気分", card:"今日の気分",
+  parts:[{id:"moodM", label:"朝"},{id:"moodN", label:"昼"},{id:"moodE", label:"晩"}],
+  note:"達成/未達はありません。行動との関係は相関ヒントと週報タブで見ます。"};
 var TREND_OPTS   = [28, 90];
 var WDAY = ["月","火","水","木","金","土","日"];
 var CORE = [
@@ -201,10 +209,10 @@ function md(s){ return (+s.slice(5,7))+"/"+(+s.slice(8,10)); }
 /* ================= データ ================= */
 function defaultData(){
   return {
-    version: 7,
+    version: 8,
     targets: {bedtime:5, youtube:5, ashwagandha:6, coffee:6, creatine:6, weight:5, gym:3, study:5, sauna:2, protein:6, steps:5, sober:4, meal:5, supp:6},
     th: {bedtime:2, youtube:1, steps:2},
-    enabled: {bedtime:true, wake:true, sleepFeel:true, youtube:true, ashwagandha:true, coffee:true, creatine:true, weight:true, gym:true, study:true, sauna:true, protein:true, steps:true, sober:true, meal:true, supp:true},
+    enabled: {bedtime:true, wake:true, sleepFeel:true, youtube:true, ashwagandha:true, coffee:true, creatine:true, weight:true, gym:true, study:true, sauna:true, protein:true, steps:true, sober:true, meal:true, supp:true, mood:true},
     custom: [],
     entries: {},
     lastBackup: null,
@@ -237,9 +245,10 @@ function migrate(d){
   var from = Number(isPlainObject(d) ? d.version : 0);
   if (!isFinite(from)) from = 0;
   // v3 で lastBackup、v4 で起床時刻(wake)と朝コーヒー(coffee)、v5 でサウナ・歩数・休肝日・食事の節制、
-  // v6 で整腸剤・サプリ、v7 でタンパク質を追加。ここまでは欠損が既定値で埋まるので値の変換は要らない。
+  // v6 で整腸剤・サプリ、v7 でタンパク質、v8 で気分を追加。
+  // 追加した項目はいずれも欠損が既定値で埋まるので値の変換は要らない。
   // v7 の歩数4段階化だけは、保存済みのインデックスの意味が変わるので読み替えが要る
-  o.version = 7;
+  o.version = 8;
   o.lastBackup = (d && typeof d.lastBackup === "string") ? d.lastBackup : null;
   o.targets = Object.assign({}, b.targets, isPlainObject(d && d.targets) ? d.targets : {});
   o.th = Object.assign({}, b.th, isPlainObject(d && d.th) ? d.th : {});
@@ -317,7 +326,8 @@ function weekStats(data, ws, today){
   return {range: md(days[0])+"–"+md(days[6]), logged:logged, items:per,
     bedtime:dist("bedtime",BEDTIME_OPTS.length), wake:dist("wake",WAKE_OPTS.length),
     sleepFeel:dist("sleepFeel",SLEEP_OPTS.length),
-    youtube:dist("youtube",YT_OPTS.length), steps:dist("steps",STEP_OPTS.length)};
+    youtube:dist("youtube",YT_OPTS.length), steps:dist("steps",STEP_OPTS.length),
+    mood:MOOD.parts.map(function(p){ return dist(p.id, MOOD_OPTS.length); })};
 }
 // カスタム項目のラベルは自由入力なので、カンマ/引用符/改行で列がずれないよう RFC4180 で囲う
 function csvCell(v){
@@ -327,6 +337,7 @@ function csvCell(v){
 function buildCSV(data){
   var cols=["date","就寝時刻","起床時刻","眠れた感","YouTube","アシュワガンダ","朝コーヒー","クレアチン","体重測定","体重","ジム","勉強","サウナ","タンパク質","歩数","休肝日"]
     .concat(perDayParts().map(function(p){return p.label;}))
+    .concat(MOOD.parts.map(function(p){return p.label+"の気分";}))
     .concat(data.custom.map(function(c){return c.label;}));
   function b(v){ return v==null ? "" : v===true ? 1 : v===false ? 0 : v; }
   var lines=[cols.map(csvCell).join(",")];
@@ -340,6 +351,7 @@ function buildCSV(data){
       b(e.ashwagandha), b(e.coffee), b(e.creatine), b(e.weight), e.weightVal!=null?e.weightVal:"", b(e.gym), b(e.study),
       b(e.sauna), b(e.protein), e.steps!=null?STEP_OPTS[e.steps]:"", b(e.sober)]
       .concat(perDayParts().map(function(p){return b(e[p.id]);}))
+      .concat(MOOD.parts.map(function(p){return e[p.id]!=null?MOOD_OPTS[e[p.id]]:"";}))
       .concat(data.custom.map(function(c){return b(e[c.id]);}));
     lines.push(row.map(csvCell).join(","));
   });
@@ -351,7 +363,12 @@ function buildReviewText(data, today){
   var p = weekStats(data, addDays(ws,-7), today);
   return "【Aubade 週報データ " + s.range + "】\n"
     + "以下のデータで週次レビューを書いてください。形式: 【事実】3行以内 / 【解釈】2行以内(推測と明示) / 【来週の一点】1つだけ具体的に。責めない・説教しない・淡々と。環境設計(摩擦の調整)の観点で提案。\n"
-    + "凡例: bedtime=["+BEDTIME_OPTS.join(",")+"] wake=["+WAKE_OPTS.join(",")+"] sleepFeel=["+SLEEP_OPTS.join(",")+"] youtube=["+YT_OPTS.join(",")+"] steps=["+STEP_OPTS.join(",")+"]\n"
+    + "凡例: bedtime=["+BEDTIME_OPTS.join(",")+"] wake=["+WAKE_OPTS.join(",")+"] sleepFeel=["+SLEEP_OPTS.join(",")+"] youtube=["+YT_OPTS.join(",")+"] steps=["+STEP_OPTS.join(",")+"] mood=["+MOOD_OPTS.join(",")+"]\n"
+    + "mood は["+MOOD.parts.map(function(p){return p.label;}).join(",")+"]の3枠ぶんの分布で、各枠が上の凡例の並びです。"
+    + "気分は計測のみで達成判定の対象ではありません。"
+    + "ここで渡しているのはどの項目も1週間ぶんの分布だけで、日ごとの対応は入っていません。"
+    + "「アシュワガンダを飲んだ日の翌朝の気分」のような日単位の突き合わせはこのデータからはできないので、"
+    + "推測で書かないでください(日単位の相関はアプリ側の相関ヒントが受け持ちます)。\n"
     + "wake(起床時刻)は計測のみで、達成判定の対象ではありません。\n"
     + "休肝日は酒を飲まなかった日として数えています。タンパク質は前日に規定量以上とれた日として数えています。"
     + "食事の節制と整腸剤・サプリは1日3回ぶんを記録し、"
@@ -616,6 +633,7 @@ function viewLog(today){
   if (en.steps) fields.push(e.steps!=null);
   if (en.sober) fields.push(e.sober!=null);
   PERDAY.forEach(function(g){ if (en[g.id]) g.parts.forEach(function(p){ fields.push(e[p.id]!=null); }); });
+  if (en.mood) MOOD.parts.forEach(function(p){ fields.push(e[p.id]!=null); });
   S.custom.forEach(function(c){ fields.push(e[c.id]!=null); });
   var done = fields.filter(Boolean).length;
 
@@ -677,6 +695,16 @@ function viewLog(today){
     h += '<div class="card"><div class="chead"><span class="ctitle">'+esc(g.card)+'</span></div>'+inner+'</div>'
       + '<p class="foot">'+esc(g.note)+'</p>';
   });
+
+  // 眠れた感と同じ色の向き(良い=pine / 悪い=sienna)。達成ラインを持たないので基準線の概念は無い
+  if (en.mood) {
+    var mi = '';
+    MOOD.parts.forEach(function(p){
+      mi += row(p.label,"", seg(p.id, MOOD_OPTS, e[p.id]!=null?e[p.id]:null, ["on-pine","on-gray","on-sienna"]));
+    });
+    h += '<div class="card"><div class="chead"><span class="ctitle">'+esc(MOOD.card)+'</span></div>'+mi+'</div>'
+      + '<p class="foot">'+esc(MOOD.note)+'</p>';
+  }
 
   h += '<p class="foot">欠損は失敗ではありません。1日抜けても習慣形成には実質影響しない、が実証の示すところです。</p>';
   return h;
@@ -925,6 +953,9 @@ function viewReview(today){
       });
       return ps;
     }
+    // 気分は3枠あるが、相関は朝の値だけを使う。前夜・当朝の要因と時間的に最も近く、
+    // 昼・晩は日中の出来事が挟まって向きが読めなくなるため(掘り下げは週報→Claude 側に置く)
+    function moodAM(e){ return e.moodM==null?null:e.moodM===0; }
     var defs=[
       {l:"就寝が達成ライン内 × 眠れた感「良」", ps:mk(function(e){return e.bedtime==null?null:e.bedtime<=S.th.bedtime;}, function(e){return e.sleepFeel==null?null:e.sleepFeel===0;})},
       {l:"起床が〜6:30以内 × 眠れた感「良」", ps:mk(function(e){return e.wake==null?null:e.wake<=1;}, function(e){return e.sleepFeel==null?null:e.sleepFeel===0;})},
@@ -937,6 +968,17 @@ function viewReview(today){
       {l:"前日に酒を飲んだ × 眠れた感「良」", ps:mk(function(e){return e.sober==null?null:e.sober===false;}, function(e){return e.sleepFeel==null?null:e.sleepFeel===0;})},
       {l:"サウナに入った × 眠れた感「良」", ps:mk(function(e){return e.sauna==null?null:e.sauna===true;}, function(e){return e.sleepFeel==null?null:e.sleepFeel===0;})},
       {l:"歩数が達成ライン以上 × 眠れた感「良」", ps:mk(function(e){return e.steps==null?null:e.steps>=S.th.steps;}, function(e){return e.sleepFeel==null?null:e.sleepFeel===0;})},
+      // ここから気分。眠れた感と対になる組を選んであるので、
+      // 「睡眠を経由して効いているのか、直接効いているのか」を並べて読める
+      {l:"朝コーヒーを飲んだ × 朝の気分「高」", ps:mk(function(e){return e.coffee==null?null:e.coffee===true;}, moodAM)},
+      {l:"アシュワガンダを飲んだ × 朝の気分「高」", ps:mk(function(e){return e.ashwagandha==null?null:e.ashwagandha===true;}, moodAM)},
+      {l:"眠れた感「良」× 朝の気分「高」", ps:mk(function(e){return e.sleepFeel==null?null:e.sleepFeel===0;}, moodAM)},
+      {l:"就寝が達成ライン内 × 朝の気分「高」", ps:mk(function(e){return e.bedtime==null?null:e.bedtime<=S.th.bedtime;}, moodAM)},
+      {l:"前日に酒を飲んだ × 朝の気分「高」", ps:mk(function(e){return e.sober==null?null:e.sober===false;}, moodAM)},
+      {l:"ジムをした × 朝の気分「高」", ps:mk(function(e){return e.gym==null?null:e.gym===true;}, moodAM)},
+      {l:"歩数が達成ライン以上 × 朝の気分「高」", ps:mk(function(e){return e.steps==null?null:e.steps>=S.th.steps;}, moodAM)},
+      // 他項目との相関ではなく、朝のよさが夜まで保つかという日内の見方
+      {l:"朝の気分「高」× 晩の気分「高」", ps:mk(moodAM, function(e){return e.moodE==null?null:e.moodE===0;})},
     ];
     var res = defs.filter(function(x){return x.ps.length>=14;})
       .map(function(x){return {l:x.l, n:x.ps.length, v:phi(x.ps)};})
@@ -1004,7 +1046,8 @@ function viewSettings(){
 
   h += '<div class="card"><div class="chead"><span class="ctitle">表示する項目</span></div>';
   var togs=[["bedtime","就寝時刻"],["wake","起床時刻"],["sleepFeel","眠れた感"],["youtube","YouTube"],["ashwagandha","アシュワガンダ"],["coffee","朝コーヒー"],["creatine","クレアチン"],["weight","体重測定"],["gym","ジム"],["study","勉強"],["sauna","サウナ"],["protein","タンパク質"],["steps","歩数"],["sober","休肝日"]]
-    .concat(PERDAY.map(function(g){ return [g.id, g.label]; }));
+    .concat(PERDAY.map(function(g){ return [g.id, g.label]; }))
+    .concat([[MOOD.id, MOOD.label]]);
   togs.forEach(function(t){
     var on = S.enabled[t[0]] !== false;
     h += '<div class="srow"><span style="font-size:14px">'+t[1]+'</span>'
@@ -1274,7 +1317,7 @@ window.__flourish = {
   SYNC_KEY: SYNC_KEY, getSync: function(){ return syncCfg; },
   syncPush: syncPush, scheduleSync: scheduleSync, syncUrlOk: syncUrlOk,
   // 項目一覧と段階の刻みはここが真実の出所。テスト側で書き写すと、増やしたときに書き写しだけが腐る
-  CORE: CORE, PERDAY: PERDAY, STEP_OPTS: STEP_OPTS,
+  CORE: CORE, PERDAY: PERDAY, STEP_OPTS: STEP_OPTS, MOOD: MOOD, MOOD_OPTS: MOOD_OPTS,
 };
 
 render();
