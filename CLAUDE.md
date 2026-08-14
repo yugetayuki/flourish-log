@@ -3,8 +3,9 @@
 個人用の朝の行動計測PWA。オーナーの幸福(flourishing)フレームワーク実装の一部として、
 Claude.ai チャット上で要件定義〜v2.0まで開発された。本書は Claude Code への引き継ぎ資料。
 
-- 最終更新: 2026-08-10 / 現行バージョン: **v2.9**(`index.html` 内 eyebrow 表記と一致させること)
-- テスト: `npm install && npm test`(vitest 125本 + 実ブラウザ smoke 25項目、全パス)
+- 最終更新: 2026-08-14 / 現行バージョン: **v2.9**(`index.html` 内 eyebrow 表記と一致させること)
+- テスト: `npm install && npm test`(vitest) と `npm run smoke`(実ブラウザ)。
+  本数は `pwa.test.js` と `tools/smoke.mjs` が正なのでここには書かない
 
 ### 名前について(v2.3で改称)
 
@@ -71,6 +72,11 @@ Claude.ai チャット上で要件定義〜v2.0まで開発された。本書は
   受信側(`tailscale serve` + 受信スクリプト)と、届いた先での変換・台帳への取り込みは
   別リポジトリ `app-hub` にある(`tools/aubade-receiver.mjs` / `tools/aubade-to-hub.mjs`)。
   **設定手順はそちらの README が正本**。ここには置かない。
+  **記録項目を足したら、app-hub 側の許可リスト(`tools/aubade-to-hub.mjs`)にも足すこと**
+  (`CORE` の項目でも、`wake` のように `enabled` だけを持つ計測項目でも同じ)。
+  拒否リストではなく許可リストなので、足すまで新項目は台帳に載らない。落ちたことは受信PCのログと
+  200応答の本文にしか出ず、`syncPush()` は本文を読まないので端末には「同期しました」と緑で出る
+  (気づく経路が無い)。app-hub 側に突き合わせのガードテストを置いてある。
 
 ---
 
@@ -85,16 +91,16 @@ Claude.ai チャット上で要件定義〜v2.0まで開発された。本書は
   `change` は `#wv`(体重数値)と `[data-th]`(達成ラインselect)。
 - 再描画で入力フォーカスが飛ぶため、自由入力は `change` イベント(blur/確定時)でのみ処理する方針。踏襲すること。
 
-### データモデル(localStorage `flourish-log-v2`、schema v6)
+### データモデル(localStorage `flourish-log-v2`、schema v7)
 
 形は `defaultData()` を読めば分かる。コードから読み取れない意味論だけを書く。
 
 - `th` = 達成ライン。**向きは項目ごとに違う**。bedtime(0..3)と youtube(0..2)は
-  **このインデックス以下で達成**、steps(1..2)だけは**このインデックス以上で達成**。
+  **このインデックス以下で達成**、steps(1..3)だけは**このインデックス以上で達成**。
   steps で最下段(0)を選べるようにすると全ての日が達成になるので、選択肢から外してある。
 - **entriesの意味論(重要)**: キーの日付=「記録した朝」。フィールドが指す時点は
   前夜(bedtime, ashwagandha)/ 当朝(wake, sleepFeel, coffee, creatine, weight, weightVal)/
-  前日(youtube, gym, study, sauna, steps, sober, カスタム)/ **当日(`PERDAY` の各 `parts`)**。
+  前日(youtube, gym, study, sauna, protein, steps, sober, カスタム)/ **当日(`PERDAY` の各 `parts`)**。
   **カスタム項目は必ず前日を指す**(「昨日」カードに描画される)。当朝・前夜の行動を足すときは `CORE` 側に置くこと。
 - **`PERDAY` の項目だけが当日を指す(v2.6 で食事、v2.7 で整腸剤・サプリ)。** 朝にまとめて入力する
   他の項目と違い、食べた/飲んだその場で1タップする運用なので、記録した朝ではなくその日自身を指す。
@@ -132,7 +138,9 @@ Claude.ai チャット上で要件定義〜v2.0まで開発された。本書は
   `dataset` 経由で読むと元の文字列に戻るため、エスケープしても機能は変わらない。
 - **`migrate()` が型の境界(v2.2)。** JSON取り込みが唯一の外部入力経路なので、ここで
   `isPlainObject()` / `normCustom()` により型を揃える。これを通った後のコードは型を再検査しない。
-  **ただし `entries` の中身は素通し**(日付キーごとに舐めると取り込みが重くなるため)。
+  **`entries` の中身は原則として素通し**(日付キーごとに舐めると取り込みが重くなるため)。
+  唯一の例外が v7 の歩数の読み替えで、ここだけは全日付を1回舐める。
+  読み替えの要る日だけ複製し、**入力オブジェクトを書き換えない**(同じJSONを二度通すと二重シフトになるため)。
   自由入力の `weightVal` だけは例外で、`change` ハンドラで「数字.数字」に整形し、
   さらに `viewTrend()` の読み出し側で `isFinite()` を確認する。NaN を SVG の座標や目盛りに
   渡すと軸ラベルごとチャートが壊れるため、入口と出口の両方で止める。
@@ -156,6 +164,17 @@ Claude.ai チャット上で要件定義〜v2.0まで開発された。本書は
   保存されるのはインデックスなので、境界を動かすと過去の記録の意味が黙って変わる。変える場合は
   `migrate()` での読み替えとセットで設計すること。
   `STEP_OPTS` は推移タブのY軸目盛りにも使い回すので、左余白(44px)に収まる短さも要件。
+  段数に依存する値(Y軸の上端・週集計の分布の長さ)は `STEP_OPTS.length` から導いてあるので、
+  刻みを増減しても書き換える定数は無い。
+  - **一度だけ破った記録(schema v7、2026-08-14)。** `STEP_OPTS` を3段階から4段階
+    (`3千以下 / 5千 / 8千 / 1万以上`)に刻み直した。読み替えは `entries[].steps` と `th.steps` の一律 +1。
+    旧0/1/2 は各段の**上限**が新1/2/3 と一致するので実際の歩数帯は動かず、過去の達成/未達も1つも変わらない
+    (`defaultData` の `th.steps` も 1→2。意味は「8千から達成」のまま)。新設の「3千以下」は今後の入力にだけ現れる。
+    このとき踏み切れたのは、app-hub の台帳にまだ Aubade のイベントが入っていない窓だと判断したため
+    (ディスク上のイベントファイルは0件だったが、**ブラウザ localStorage 側の台帳は未確認**)。
+    一般に安全になったわけではない。次に刻みを変えるときは (a)`migrate()` の読み替え
+    (b)`version` の引き上げ (c)app-hub 台帳との整合 の3点セットで設計すること。
+    台帳は追記オンリーで、入ってしまった旧スケールの値は後から直せない。
 - **Service Worker はネットワーク優先を崩さない。** キャッシュ優先にすると「古いHTMLを掴み続けて
   版が上がらない」事故が起きる。Service Worker を入れずにきた理由がそれなので、速度ではなく
   更新の確実さを取る。得られるのはオフライン起動だけでよい。
@@ -199,8 +218,8 @@ Claude.ai チャット上で要件定義〜v2.0まで開発された。本書は
 
 ```bash
 npm install
-npm test        # vitest 125本。ロジックとDOM操作
-npm run smoke   # 実ブラウザ(Chromium) 25項目。描画・保存・CSP・Service Workerの実効性
+npm test        # vitest。ロジックとDOM操作
+npm run smoke   # 実ブラウザ(Chromium)。描画・保存・CSP・Service Workerの実効性
 ```
 
 - 方式: 出荷物である `index.html` そのものを `JSDOM(html, {runScripts:"dangerously"})` で起動し、
@@ -329,8 +348,8 @@ v2.0に至るまでに以下を検証して破棄した。同じ穴を掘り直�
 
 ```bash
 npm install
-npm test        # 125 passed
-npm run smoke   # 25/25 passed
+npm test
+npm run smoke
 ```
 
 1. `.claude/rules/10-guardrails.md` を読む(これが受け入れ基準)。
