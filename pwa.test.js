@@ -1809,6 +1809,61 @@ describe("PWA v2.9: 今の気分", () => {
     expect(row.textContent).toContain("φ=1.00");
   });
 
+  // |φ| だけで並べると、記録し始めの行がたまたま大きく振れただけで上位を占める
+  it("確かさは記録日数が少ないほど 0 に寄る", () => {
+    const f = boot().window.__flourish;
+    expect(f.strength(0.43, 14)).toBe(0);
+    expect(f.strength(0.4, 100)).toBeGreaterThan(0);
+    // 完全一致なら日数が少なくても強い。日数だけで殺さないこと
+    expect(f.strength(1, 14)).toBeGreaterThan(0.9);
+    expect(f.strength(0.9, 3)).toBe(0);
+    // 丸め誤差で |φ| が1をわずかに超えても NaN を返さない(NaN は並び順だけを黙って壊す)
+    expect(Number.isNaN(f.strength(1.0000000000000002, 50))).toBe(false);
+    expect(f.strength(1.0000000000000002, 50)).toBeGreaterThan(0);
+  });
+
+  it("相関ヒントは |φ| ではなく記録日数を踏まえた確かさの順に並ぶ", () => {
+    const f0 = boot().window.__flourish;
+    const d = f0.defaultData();
+    const day = (i) => { const t = new Date("2026-04-01T00:00"); t.setDate(t.getDate() + i); return f0.fmt(t); };
+    // アシュワガンダ × 眠れた感「良」: 35/15/15/35 の2x2 で n=100, φ=0.40
+    for (let i = 0; i < 100; i++) {
+      const ash = i < 50;
+      const good = ash ? i < 35 : i >= 65;
+      d.entries[day(i)] = { ashwagandha: ash, sleepFeel: good ? 0 : 1 };
+    }
+    // 朝コーヒー × 朝の気分「高」: 5/2/2/5 の2x2 で n=14, φ=0.43(|φ| はこちらが上)
+    for (let i = 0; i < 14; i++) {
+      d.entries[day(i)].coffee = i < 7;
+      d.entries[day(i)].moodM = i < 5 || (i >= 7 && i < 9) ? 0 : 2;
+    }
+    const dom = boot(JSON.stringify(d));
+    byText(dom, "button.tb", "週報").click();
+    const rows = qa(dom, "#view .row").map((el) => el.textContent);
+    const ash = rows.findIndex((t) => t.includes("アシュワガンダを飲んだ × 眠れた感"));
+    const cof = rows.findIndex((t) => t.includes("朝コーヒーを飲んだ × 朝の気分"));
+    expect(rows[cof]).toContain("n=14");
+    expect(rows[ash]).toContain("n=100");
+    expect(Math.abs(+rows[cof].match(/φ=(-?[0-9.]+)/)[1])).toBeGreaterThan(Math.abs(+rows[ash].match(/φ=(-?[0-9.]+)/)[1]));
+    expect(ash).toBeLessThan(cof);
+  });
+
+  // 分母が「晩にもアプリを開いた日」に自己選択される。データからは取り除けないので条件を出す
+  it("朝×晩の行は分母が限られることをラベルに出す", () => {
+    const f0 = boot().window.__flourish;
+    const d = f0.defaultData();
+    for (let i = 0; i < 28; i++) {
+      const t = new Date("2026-04-01T00:00");
+      t.setDate(t.getDate() + i);
+      d.entries[f0.fmt(t)] = { moodM: i % 2 === 0 ? 0 : 2, moodE: i % 2 === 0 ? 0 : 2 };
+    }
+    const dom = boot(JSON.stringify(d));
+    byText(dom, "button.tb", "週報").click();
+    const row = qa(dom, "#view .row").find((el) => el.textContent.includes("朝の気分「高」× 晩の気分「高」"));
+    expect(row).not.toBe(undefined);
+    expect(row.textContent).toContain("晩も記録した日だけ");
+  });
+
   it("気分を持たない旧データも既定値で埋まる", () => {
     const f = boot().window.__flourish;
     const m = f.migrate({ version: 7, targets: { gym: 4 }, entries: { "2026-08-01": { gym: true } } });

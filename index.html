@@ -291,6 +291,17 @@ function allItems(data){
   return CORE.map(function(c){ return {id:c.id, label:c.label, tgt:data.targets[c.id]}; })
     .concat(data.custom.map(function(c){ return {id:c.id, label:c.label, tgt:c.target}; }));
 }
+// |φ| だけで並べると、n=14 の行が n=120 の行より上に来る。項目を足すたびに
+// 記録し始めの行が上位を占め、たまたま大きく振れた値が最も目立つ場所に出続ける。
+// φ は2値変数のピアソン相関なので、Fisher の z 変換で 95% 下側限界を取り、
+// 記録日数が少ない行を 0 に寄せてから並べる。表示する値は実測の φ のまま。
+function strength(v, n){
+  if (n <= 3) return 0;
+  // |φ| は理屈の上では1を超えないが、丸め誤差でわずかに超えると atanh が NaN を返す。
+  // NaN は比較が常に false になるので、並び順だけが黙って壊れる。手前で止める
+  var lo = Math.atanh(Math.min(Math.abs(v), 0.999)) - 1.96/Math.sqrt(n-3);
+  return lo <= 0 ? 0 : Math.tanh(lo);
+}
 function phi(pairs){
   var a=0,b=0,c=0,d=0;
   pairs.forEach(function(p){
@@ -977,19 +988,24 @@ function viewReview(today){
       {l:"前日に酒を飲んだ × 朝の気分「高」", ps:mk(function(e){return e.sober==null?null:e.sober===false;}, moodAM)},
       {l:"ジムをした × 朝の気分「高」", ps:mk(function(e){return e.gym==null?null:e.gym===true;}, moodAM)},
       {l:"歩数が達成ライン以上 × 朝の気分「高」", ps:mk(function(e){return e.steps==null?null:e.steps>=S.th.steps;}, moodAM)},
-      // 他項目との相関ではなく、朝のよさが夜まで保つかという日内の見方
-      {l:"朝の気分「高」× 晩の気分「高」", ps:mk(moodAM, function(e){return e.moodE==null?null:e.moodE===0;})},
+      // 他項目との相関ではなく、朝のよさが夜まで保つかという日内の見方。
+      // 他の行と違い、分母が「晩にもアプリを開いた日」に自己選択される(朝の項目は
+      // 同じ入力で一緒に埋まるが、晩の枠は別の機会に開かないと埋まらない)。
+      // データからは取り除けないので、条件をラベルに出して読む側に見えるようにする
+      {l:"朝の気分「高」× 晩の気分「高」(晩も記録した日だけ)", ps:mk(moodAM, function(e){return e.moodE==null?null:e.moodE===0;})},
     ];
     var res = defs.filter(function(x){return x.ps.length>=14;})
-      .map(function(x){return {l:x.l, n:x.ps.length, v:phi(x.ps)};})
-      .sort(function(a,b){return Math.abs(b.v)-Math.abs(a.v);});
+      .map(function(x){var v=phi(x.ps); return {l:x.l, n:x.ps.length, v:v, s:strength(v, x.ps.length)};})
+      // 同じ確かさなら記録日数の多い方を上に。φ の大小はその次(見かけの強さで上位を取らせない)
+      .sort(function(a,b){ return (b.s-a.s) || (b.n-a.n) || (Math.abs(b.v)-Math.abs(a.v)); });
     if (!res.length) h += '<p style="font-size:13px;color:var(--sub);padding:10px 0">両項目が揃った日がまだ少なく、計算できるペアがありません。</p>';
     else {
       res.forEach(function(x){
         h += '<div class="row"><div style="font-size:13px">'+esc(x.l)+'</div>'
           + '<div class="sub mono">φ='+x.v.toFixed(2)+'('+(x.v>0.1?'正':x.v<-0.1?'負':'ほぼ無')+') n='+x.n+'</div></div>';
       });
-      h += '<p class="foot">相関であって因果ではありません。nも小さいため参考程度に。</p>';
+      h += '<p class="foot">相関であって因果ではありません。並びは φ の大きさではなく、'
+        + '記録日数を踏まえた確かさの順です(nが少ない行は下がります)。</p>';
     }
   }
   h += '</div>';
@@ -1310,7 +1326,7 @@ window.__flourish = {
   getS: function(){ return S; },
   setS: function(v){ S = v; },
   save: save, render: render,
-  achieved: achieved, phi: phi, buildCSV: buildCSV, weekStats: weekStats,
+  achieved: achieved, phi: phi, strength: strength, buildCSV: buildCSV, weekStats: weekStats,
   defaultData: defaultData, migrate: migrate, fmt: fmt, weekStart: weekStart,
   buildReviewText: buildReviewText, KEY: KEY, syncToday: syncToday,
   brokenKeys: brokenKeys, BROKEN_PREFIX: BROKEN_PREFIX,
