@@ -1546,6 +1546,24 @@ describe("PWA v3.0: v7 スキーマ(歩数の4段階化)", () => {
     expect(m.entries["2026-08-03"].steps).toBe(3);
   });
 
+  // 取り込みJSONは version キーを欠きうる。Object.assign は既定値で埋めるので、
+  // 生の入力ではなく o.version で版を判定すると、この経路のシフトだけが丸ごと効かなくなる
+  it("version キーを持たない入力でも歩数を読み替える", () => {
+    const f = boot().window.__flourish;
+    const m = f.migrate({ th: { steps: 1 }, entries: { "2026-08-01": { steps: 2 } } });
+    expect(m.entries["2026-08-01"].steps).toBe(3);
+    expect(m.th.steps).toBe(2);
+  });
+
+  // 版は defaultData と migrate の2箇所に書かれている。片方だけ上げると、
+  // 保存済みデータが毎回「古い版」と判定され続けて移行が繰り返し走る
+  it("migrate が書き込む版は defaultData の版と一致し、二度通しても動かない", () => {
+    const f = boot().window.__flourish;
+    const v = f.defaultData().version;
+    expect(f.migrate({}).version).toBe(v);
+    expect(f.migrate(f.migrate({ version: 5, entries: {} })).version).toBe(v);
+  });
+
   // 読み替えの目的は「過去の達成/未達が1つも変わらない」こと。旧仕様の式を右辺に置いて突き合わせる
   it("読み替えても過去の達成判定が1つも変わらない", () => {
     const f = boot().window.__flourish;
@@ -1790,6 +1808,9 @@ describe("PWA v3.0: 今の気分", () => {
     const t = f.buildReviewText(d, day(6));
     expect(t).toContain("mood=[高,中,低]");
     expect(t).toContain("計測のみで達成判定の対象ではありません");
+    // この2文が、渡していない日ごとの対応を Claude が推測で埋めるのを止めている唯一の指示
+    expect(t).toContain("3枠ぶんの分布");
+    expect(t).toContain("日単位の突き合わせ");
   });
 
   // 前夜・当朝の要因と時間的に最も近いので、相関には朝の値だけを使う
@@ -1829,7 +1850,8 @@ describe("PWA v3.0: 今の気分", () => {
     // アシュワガンダ × 眠れた感「良」: 35/15/15/35 の2x2 で n=100, φ=0.40
     for (let i = 0; i < 100; i++) {
       const ash = i < 50;
-      const good = ash ? i < 35 : i >= 65;
+      // 35/15/15/35 にする。i>=65 だと 35/15/35/15 になり φ=0.00 で strength が同点になる
+      const good = ash ? i < 35 : i >= 85;
       d.entries[day(i)] = { ashwagandha: ash, sleepFeel: good ? 0 : 1 };
     }
     // 朝コーヒー × 朝の気分「高」: 5/2/2/5 の2x2 で n=14, φ=0.43(|φ| はこちらが上)
@@ -1844,8 +1866,39 @@ describe("PWA v3.0: 今の気分", () => {
     const cof = rows.findIndex((t) => t.includes("朝コーヒーを飲んだ × 朝の気分"));
     expect(rows[cof]).toContain("n=14");
     expect(rows[ash]).toContain("n=100");
+    // フィクスチャが意図した φ を作れていないと、両者の strength が 0 で同点になり
+    // 並びが第2キー(記録日数)だけで決まる。値そのものを固定して、検査対象を守る
+    expect(rows[ash]).toContain("φ=0.40");
+    expect(rows[cof]).toContain("φ=0.43");
     expect(Math.abs(+rows[cof].match(/φ=(-?[0-9.]+)/)[1])).toBeGreaterThan(Math.abs(+rows[ash].match(/φ=(-?[0-9.]+)/)[1]));
     expect(ash).toBeLessThan(cof);
+  });
+
+  // 上のテストは確かさ順と記録日数順が同じ並びになる形なので、単なる日数順への劣化を検出できない。
+  // 日数は少ないが確かさは高い対を置いて、両者が食い違う場合を縛る
+  it("記録日数が少なくても確かさが高ければ上に来る", () => {
+    const f0 = boot().window.__flourish;
+    const d = f0.defaultData();
+    const day = (i) => { const t = new Date("2026-04-01T00:00"); t.setDate(t.getDate() + i); return f0.fmt(t); };
+    // アシュワガンダ × 眠れた感「良」: 28/22/22/28 の2x2 で n=100, φ=0.12(確かさは 0 に潰れる)
+    for (let i = 0; i < 100; i++) {
+      const ash = i < 50;
+      d.entries[day(i)] = { ashwagandha: ash, sleepFeel: (ash ? i < 28 : i >= 78) ? 0 : 1 };
+    }
+    // 朝コーヒー × 朝の気分「高」: n=14 だが完全一致(φ=1.00)
+    for (let i = 0; i < 14; i++) {
+      d.entries[day(i)].coffee = i < 7;
+      d.entries[day(i)].moodM = i < 7 ? 0 : 2;
+    }
+    const dom = boot(JSON.stringify(d));
+    byText(dom, "button.tb", "週報").click();
+    const rows = qa(dom, "#view .row").map((el) => el.textContent);
+    const ash = rows.findIndex((t) => t.includes("アシュワガンダを飲んだ × 眠れた感"));
+    const cof = rows.findIndex((t) => t.includes("朝コーヒーを飲んだ × 朝の気分"));
+    expect(rows[cof]).toContain("φ=1.00");
+    expect(rows[cof]).toContain("n=14");
+    expect(rows[ash]).toContain("n=100");
+    expect(cof).toBeLessThan(ash);
   });
 
   // 分母が「晩にもアプリを開いた日」に自己選択される。データからは取り除けないので条件を出す
@@ -1886,6 +1939,8 @@ describe("PWA v3.0: 項目の結線ガード(CORE 起点)", () => {
     f.CORE.forEach((c) => {
       expect(tgts).toContain(c.id);
       expect(togs).toContain(c.id);
+      // data-tgt は targets に値が無くても描画され、週タブは「1/undefined」と出るだけで落ちない
+      expect(typeof f.defaultData().targets[c.id]).toBe("number");
       // 1日3回ぶんの項目は parts が入力欄とCSV列を持ち、畳んだ id 自体は持たない
       (c.parts || [{ id: c.id, label: c.label }]).forEach((p) => {
         expect(onLog).toContain(p.id);
@@ -1946,6 +2001,45 @@ describe("PWA v3.0: 項目の結線ガード(CORE 起点)", () => {
       const cells = f.buildCSV(d).split("\n")[1].split(",").slice(1);
       expect(cells.filter((c) => c !== "").length).toBeGreaterThan(0);
     });
+  });
+
+  // 幅が合っていても、ヘッダーと行の対応がずれれば値は別の列の下に出る。
+  // 1項目ずつ埋めて、それぞれが自分だけの列に出ることを確かめる
+  it("記録できる項目のCSV列が互いに重ならない", () => {
+    const f = boot().window.__flourish;
+    const NUM = { bedtime: 1, wake: 1, sleepFeel: 1, youtube: 1, steps: 1, moodM: 0, moodN: 0, moodE: 0 };
+    const groups = f.PERDAY.concat([f.MOOD]);
+    const ids = [];
+    Object.keys(f.defaultData().enabled).forEach((id) => {
+      const g = groups.find((x) => x.id === id);
+      (g ? g.parts : [{ id }]).forEach((p) => ids.push(p.id));
+    });
+    // ラベルが分かる項目は、値が自分のラベルの列に出ることまで見る(列が入れ替わっても幅は合うため)
+    const labels = new Map();
+    f.CORE.forEach((c) => (c.parts || [c]).forEach((p) => labels.set(p.id, p.label)));
+    f.MOOD.parts.forEach((p) => labels.set(p.id, p.label));
+    const seen = new Map();
+    ids.forEach((id) => {
+      const d = f.defaultData();
+      d.entries["2026-08-08"] = { [id]: NUM[id] != null ? NUM[id] : true };
+      const [head, row] = f.buildCSV(d).split("\n");
+      const at = row.split(",").findIndex((c, i) => i > 0 && c !== "");
+      expect(at).toBeGreaterThan(0);
+      expect(seen.get(at)).toBe(undefined); // 別の項目と同じ列に出たら対応が壊れている
+      if (labels.has(id)) expect(head.split(",")[at]).toContain(labels.get(id));
+      seen.set(at, id);
+    });
+    expect(seen.size).toBe(ids.length);
+  });
+
+  // 版表記は5箇所にある。1つでも食い違うと実機での反映確認ができなくなる
+  it("版表記が index.html・sw.js・package.json で一致する", () => {
+    const html = readFileSync("index.html", "utf8");
+    const ver = html.match(/DAWN&nbsp;LOG&nbsp;·&nbsp;v([0-9.]+)/)[1];
+    expect(html.match(/環境設計の仕事です。 v([0-9.]+)/)[1]).toBe(ver);
+    expect(readFileSync("sw.js", "utf8")).toContain('"aubade-v' + ver + '"');
+    expect(JSON.parse(readFileSync("package.json", "utf8")).version).toBe(ver + ".0");
+    expect(JSON.parse(readFileSync("package-lock.json", "utf8")).version).toBe(ver + ".0");
   });
 
   // README の表は手書きの写しなので、項目を足したときに片方だけ古くなる
