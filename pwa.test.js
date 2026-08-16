@@ -133,7 +133,7 @@ describe("PWA v4.5: ロジック(移植の同一性)", () => {
     const [head, row] = f.buildCSV(d).split("\n");
     expect(head).toContain("就寝時刻(分)");
     // 分の実値をそのまま出す。1512=25:12(v9 の移行値)、390=6:30、30=30分
-    expect(row).toBe("2026-08-08,1512,390,普通,30,0,1,1,1,68.5,0,1,,,,,,,,,,,,,,,,,");
+    expect(row).toBe("2026-08-08,1512,390,普通,30,0,1,1,1,68.5,0,1,,,,,,,,,,,,,,,,,,");
   });
 
   it("週報コピー用テキストに凡例と今週/前週JSONが含まれる", () => {
@@ -300,7 +300,7 @@ describe("PWA v4.5: CSVの列ずれ", () => {
     const [head, row] = f.buildCSV(d).split("\n");
     expect(head).toContain('"読書, 英語"');
     expect(head.split('"').length).toBe(3); // 引用符は1フィールド分の2つだけ
-    expect(row).toBe("2026-08-08,,,,,,,,,,1,,,,,,,,,,,,,,,,,,,1");
+    expect(row).toBe("2026-08-08,,,,,,,,,,1,,,,,,,,,,,,,,,,,,,,1");
   });
 
   it("引用符を含むラベルは二重引用符でエスケープする", () => {
@@ -460,7 +460,7 @@ describe("PWA v4.5: 取り込んだJSONを信用しない", () => {
   it("lastBackup を持たない v2 データも読める", () => {
     const f = boot().window.__flourish;
     const m = f.migrate({ version: 2, entries: { "2026-08-01": { gym: true } } });
-    expect(m.version).toBe(12);
+    expect(m.version).toBe(13);
     expect(m.lastBackup).toBe(null);
     expect(m.entries["2026-08-01"].gym).toBe(true);
   });
@@ -636,7 +636,7 @@ describe("PWA v4.5: 起床時刻(計測のみ)", () => {
     d.entries["2026-08-08"] = { bedtimeMin: 1320, wakeMin: 450 };
     const [head, row] = f.buildCSV(d).split("\n");
     expect(head).toContain("起床時刻(分)");
-    expect(row).toBe("2026-08-08,1320,450,,,,,,,,,,,,,,,,,,,,,,,,,,");
+    expect(row).toBe("2026-08-08,1320,450,,,,,,,,,,,,,,,,,,,,,,,,,,,");
     const t = f.buildReviewText(d, "2026-08-08");
     expect(t).toContain("wakeMin");
     expect(t).toContain("分の実値");
@@ -647,7 +647,7 @@ describe("PWA v4.5: 起床時刻(計測のみ)", () => {
   it("wake を持たない旧データも読め、version が上がる", () => {
     const f = boot().window.__flourish;
     const m = f.migrate({ version: 3, entries: { "2026-08-01": { bedtime: 1 } } });
-    expect(m.version).toBe(12);
+    expect(m.version).toBe(13);
     expect(m.enabled.wakeMin).toBe(true);
     expect(m.entries["2026-08-01"]).toEqual({ bedtimeMin: 1410 });
   });
@@ -962,7 +962,7 @@ describe("PWA v4.5: ひとこと(その日の出来事)", () => {
   it("memo を持たない旧データも読め、version が上がる", () => {
     const f = boot().window.__flourish;
     const m = f.migrate({ version: 11, entries: { "2026-08-01": { gym: true } } });
-    expect(m.version).toBe(12);
+    expect(m.version).toBe(13);
     expect(m.entries["2026-08-01"].memo).toBe(undefined);
   });
 });
@@ -1010,8 +1010,9 @@ describe("PWA v4.5: 誰と過ごしたか(計測のみ)", () => {
     const d = f.defaultData();
     d.entries["2026-08-08"] = { companion: 2 };
     const [head, row] = f.buildCSV(d).split("\n");
+    // 添字を書くと列が増えるたびに腐るので、ヘッダーから引く
     expect(head).toContain("誰と");
-    expect(row.split(",")[18]).toBe("友人");
+    expect(row.split(",")[head.split(",").indexOf("誰と")]).toBe("友人");
   });
 
   // 記録できても週報に渡らなければ、気分との突き合わせができず集めた意味が無い
@@ -1031,7 +1032,7 @@ describe("PWA v4.5: 誰と過ごしたか(計測のみ)", () => {
   it("companion を持たない旧データも読め、version が上がる", () => {
     const f = boot().window.__flourish;
     const m = f.migrate({ version: 10, entries: { "2026-08-01": { gym: true } } });
-    expect(m.version).toBe(12);
+    expect(m.version).toBe(13);
     expect(m.enabled.companion).toBe(true);
     expect(m.entries["2026-08-01"].companion).toBe(undefined);
   });
@@ -1069,7 +1070,7 @@ describe("PWA v4.5: 朝コーヒー", () => {
     const [head, row] = f.buildCSV(d).split("\n");
     expect(head).toContain("朝コーヒー");
     expect(head.split(",").indexOf("朝コーヒー")).toBe(head.split(",").indexOf("クレアチン") - 1);
-    expect(row).toBe("2026-08-08,,,,,,0,,,,,,,,,,,,,,,,,,,,,,");
+    expect(row).toBe("2026-08-08,,,,,,0,,,,,,,,,,,,,,,,,,,,,,,");
   });
 
   it("coffee を持たない旧データも既定値で埋まる", () => {
@@ -1259,7 +1260,7 @@ describe("PWA v4.5: v5 スキーマ", () => {
       th: { bedtime: 0 },
       entries: { "2026-08-01": { gym: true } },
     });
-    expect(m.version).toBe(12);
+    expect(m.version).toBe(13);
     expect(m.targets.gym).toBe(4);
     expect(m.th.bedtimeMin).toBe(1380);
     // 達成ラインを設定していない旧データは、シフトの対象ではなく新既定で埋まる
@@ -1291,7 +1292,7 @@ describe("PWA v4.5: v5 スキーマ", () => {
     d.entries["2026-08-08"] = { sauna: true, steps: 3, sober: false, mealB: true, mealD: false };
     const [head, row] = f.buildCSV(d).split("\n");
     ["サウナ", "歩数", "休肝日", "朝食", "昼食", "夕食"].forEach((c) => expect(head).toContain(c));
-    expect(row).toBe("2026-08-08,,,,,,,,,,,,1,,,,1万以上,0,,,1,,0,,,,,,");
+    expect(row).toBe("2026-08-08,,,,,,,,,,,,1,,,,1万以上,,0,,,1,,0,,,,,,");
     const t = f.buildReviewText(d, "2026-08-08");
     expect(t).toContain("steps=[3千以下,5千,8千,1万以上]");
     expect(t).toContain("休肝日は酒を飲まなかった日");
@@ -1362,7 +1363,7 @@ describe("PWA v4.5: 整腸剤・サプリ", () => {
   it("v5 データを読んでも既存の設定を保ち、サプリは既定値で埋まる", () => {
     const f = boot().window.__flourish;
     const m = f.migrate({ version: 5, targets: { meal: 3 }, entries: { "2026-08-01": { mealB: true } } });
-    expect(m.version).toBe(12);
+    expect(m.version).toBe(13);
     expect(m.targets.meal).toBe(3);
     expect(m.targets.supp).toBe(6);
     expect(m.enabled.supp).toBe(true);
@@ -1375,7 +1376,7 @@ describe("PWA v4.5: 整腸剤・サプリ", () => {
     d.entries["2026-08-08"] = { suppM: true, suppE: false };
     const [head, row] = f.buildCSV(d).split("\n");
     ["朝サプリ", "昼サプリ", "晩サプリ"].forEach((c) => expect(head).toContain(c));
-    expect(row).toBe("2026-08-08,,,,,,,,,,,,,,,,,,,,,,,1,,0,,,");
+    expect(row).toBe("2026-08-08,,,,,,,,,,,,,,,,,,,,,,,,1,,0,,,");
     expect(f.buildReviewText(d, "2026-08-08")).toContain("食事の節制と整腸剤・サプリは1日3回ぶんを記録し");
   });
 });
@@ -1710,7 +1711,7 @@ describe("PWA v4.5: v7 スキーマ(歩数の4段階化)", () => {
         "2026-08-03": { steps: 2 },
       },
     });
-    expect(m.version).toBe(12);
+    expect(m.version).toBe(13);
     expect(m.th.steps).toBe(2);
     expect(m.entries["2026-08-01"].steps).toBe(1);
     expect(m.entries["2026-08-02"]).toEqual({ steps: 2, gym: true });
@@ -2335,7 +2336,7 @@ describe("PWA v4.5: v9 スキーマ(就寝・起床・YouTube の分値化)", ()
       enabled: { bedtime: false, wake: true, youtube: true },
       entries: { "2026-08-01": { bedtime: 0, wake: 4, youtube: 3, gym: true } },
     });
-    expect(m.version).toBe(12);
+    expect(m.version).toBe(13);
     expect(m.entries["2026-08-01"]).toEqual({ bedtimeMin: 1380, wakeMin: 492, youtubeMin: 150, gym: true });
     expect(m.th.bedtimeMin).toBe(1410);
     expect(m.th.youtubeMin).toBe(120);
@@ -2506,7 +2507,7 @@ describe("PWA v4.5: お風呂・肌ケア / マウスケア", () => {
   it("v9 データを読んでも既定値で埋まり、既存の設定は残る", () => {
     const f = boot().window.__flourish;
     const m = f.migrate({ version: 9, targets: { gym: 4 }, entries: { "2026-08-01": { gym: true } } });
-    expect(m.version).toBe(12);
+    expect(m.version).toBe(13);
     ITEMS.forEach(({ id }) => {
       expect(m.targets[id]).toBe(6);
       expect(m.enabled[id]).toBe(true);
@@ -2581,5 +2582,63 @@ describe("PWA v4.5: 明日ぶんの先取り入力", () => {
     for (let i = 0; i < 7; i++) nav(dom, -1).click();
     expect(q(dom, ".dateT").textContent).toContain("8/9");
     expect(nav(dom, -1).disabled).toBe(true);
+  });
+});
+
+describe("PWA v4.5: 水分(お試し)", () => {
+  // 実値(ml)で保存する。刻みを変えても過去の記録の意味は動かないので migrate は要らない
+  it("500ml刻みの select で、値は ml の実値として保存される", () => {
+    const dom = boot();
+    const f = dom.window.__flourish;
+    const s = q(dom, 'select[data-f="waterMl"]');
+    expect(s).not.toBe(null);
+    expect(s.value).toBe(""); // 既定値があると未入力と区別できず、推奨量にも見える
+    const vals = [...s.options].slice(1).map((o) => Number(o.value));
+    expect(vals[0]).toBe(0); // 0ml は正当な記録
+    vals.slice(1).forEach((v, i) => expect(v - vals[i]).toBe(500));
+    expect(vals[vals.length - 1]).toBe(4000); // 天井は4Lまで取ってある
+    s.value = "1500";
+    s.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
+    expect(JSON.parse(dom.window.localStorage.getItem(KEY)).entries[f.fmt(new Date())]).toEqual({ waterMl: 1500 });
+  });
+
+  // 歩数と同じ「以上で達成」の向き
+  it("達成ラインは以上で達成、既定は2L", () => {
+    const f = boot().window.__flourish;
+    const d = f.defaultData();
+    expect(d.th.waterMl).toBe(2000);
+    expect(f.achieved(d, { waterMl: 2000 }, "waterMl")).toBe(true);
+    expect(f.achieved(d, { waterMl: 1500 }, "waterMl")).toBe(false);
+    expect(f.achieved(d, { waterMl: 0 }, "waterMl")).toBe(false);
+    expect(f.achieved(d, {}, "waterMl")).toBe(null);
+  });
+
+  it("達成ラインは1Lから選べる(2Lは俗説なので下げられること自体が要件)", () => {
+    const dom = boot();
+    byText(dom, "button.tb", "設定").click();
+    const vals = [...q(dom, '[data-th="waterMl"]').options].map((o) => Number(o.value));
+    expect(vals).toEqual([1000, 1500, 2000, 2500, 3000]);
+  });
+
+  it("週報には ml の実値を昇順で渡す", () => {
+    const f = boot().window.__flourish;
+    const d = f.defaultData();
+    const ws = f.weekStart(new Date("2026-08-05T00:00"));
+    const day = (n) => f.fmt(new Date(ws.getFullYear(), ws.getMonth(), ws.getDate() + n));
+    d.entries[day(0)] = { waterMl: 2500 };
+    d.entries[day(1)] = { waterMl: 0 };
+    const s = f.weekStats(d, ws, day(6));
+    expect(s.waterMl).toEqual([0, 2500]); // 0ml を落とさない
+    expect(f.buildReviewText(d, day(6))).toContain("waterMl");
+  });
+
+  it("水分を持たない旧データも既定値で埋まる", () => {
+    const f = boot().window.__flourish;
+    const m = f.migrate({ version: 12, targets: { gym: 4 }, entries: { "2026-08-01": { gym: true } } });
+    expect(m.version).toBe(13);
+    expect(m.targets.waterMl).toBe(6);
+    expect(m.th.waterMl).toBe(2000);
+    expect(m.enabled.waterMl).toBe(true);
+    expect(m.targets.gym).toBe(4);
   });
 });
