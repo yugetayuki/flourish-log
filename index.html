@@ -132,7 +132,7 @@ svg{display:block}
 <body>
 <div id="wrap">
   <header>
-    <div class="title"><h1>Aubade</h1><span class="eyebrow mono">DAWN&nbsp;LOG&nbsp;·&nbsp;v4.1</span></div>
+    <div class="title"><h1>Aubade</h1><span class="eyebrow mono">DAWN&nbsp;LOG&nbsp;·&nbsp;v4.2</span></div>
     <span id="saveState"></span>
   </header>
   <div id="banner"></div>
@@ -423,6 +423,7 @@ function weekStats(data, ws, today){
   return {range: md(days[0])+"–"+md(days[6]), logged:logged, items:per,
     bedtimeMin:vals("bedtimeMin"), wakeMin:vals("wakeMin"), youtubeMin:vals("youtubeMin"),
     sleepFeel:dist("sleepFeel",SLEEP_OPTS.length), steps:dist("steps",STEP_OPTS.length),
+    companion:dist("companion",COMPANION_OPTS.length),
     mood:MOOD.parts.map(function(p){ return dist(p.id, MOOD_OPTS.length); })};
 }
 // カスタム項目のラベルは自由入力なので、カンマ/引用符/改行で列がずれないよう RFC4180 で囲う
@@ -461,7 +462,8 @@ function buildReviewText(data, today){
   var p = weekStats(data, addDays(ws,-7), today);
   return "【Aubade 週報データ " + s.range + "】\n"
     + "以下のデータで週次レビューを書いてください。形式: 【事実】3行以内 / 【解釈】2行以内(推測と明示) / 【来週の一点】1つだけ具体的に。責めない・説教しない・淡々と。環境設計(摩擦の調整)の観点で提案。\n"
-    + "凡例: sleepFeel=["+SLEEP_OPTS.join(",")+"] steps=["+STEP_OPTS.join(",")+"] mood=["+MOOD_OPTS.join(",")+"]\n"
+    + "凡例: sleepFeel=["+SLEEP_OPTS.join(",")+"] steps=["+STEP_OPTS.join(",")+"] mood=["+MOOD_OPTS.join(",")+"]"
+    + " companion=["+COMPANION_OPTS.join(",")+"]\n"
     + "bedtimeMin / wakeMin / youtubeMin は分の実値を昇順に並べたものです"
     + "(就寝は 24:00=1440 で、24時を超えた日は1440超。YouTube は視聴した分数)。\n"
     + "mood は["+MOOD.parts.map(function(p){return p.label;}).join(",")+"]の3枠ぶんの分布で、各枠が上の凡例の並びです。"
@@ -470,6 +472,9 @@ function buildReviewText(data, today){
     + "「アシュワガンダを飲んだ日の翌朝の気分」のような日単位の突き合わせはこのデータからはできないので、"
     + "推測で書かないでください(日単位の相関はアプリ側の相関ヒントが受け持ちます)。\n"
     + "wakeMin(起床時刻)は計測のみで、達成判定の対象ではありません。\n"
+    + "companion(誰と過ごしたか)も計測のみで、順序も良し悪しもありません。"
+    + "「ひとりが多い週は良くない」のような価値づけをせず、分布の事実として扱ってください。"
+    + "相手の人数や名前は記録していません。\n"
     + "休肝日は酒を飲まなかった日として数えています。タンパク質は前日に規定量以上とれた日として数えています。"
     + "食事の節制と整腸剤・サプリは1日3回ぶんを記録し、"
     + "記録した回がすべて達成なら1日ぶんの達成です(記録しなかった回は数えません)。\n"
@@ -1300,7 +1305,7 @@ function viewSettings(){
   h += '</div></div>';
 
   h += '<p class="foot">データはこの端末のブラウザ(このアプリ)内にのみ保存されます。バックアップはJSONコピーで。'
-    + 'このアプリの役割は計測と週次フィードバックまで — 行動を変えるのは環境設計の仕事です。 v4.1</p>';
+    + 'このアプリの役割は計測と週次フィードバックまで — 行動を変えるのは環境設計の仕事です。 v4.2</p>';
   return h;
 }
 
