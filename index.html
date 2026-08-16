@@ -135,7 +135,7 @@ svg{display:block}
 <body>
 <div id="wrap">
   <header>
-    <div class="title"><h1>Aubade</h1><span class="eyebrow mono">DAWN&nbsp;LOG&nbsp;·&nbsp;v4.11</span></div>
+    <div class="title"><h1>Aubade</h1><span class="eyebrow mono">DAWN&nbsp;LOG&nbsp;·&nbsp;v4.12</span></div>
     <span id="saveState"></span>
   </header>
   <div id="banner"></div>
@@ -189,7 +189,9 @@ var COMPANION_OPTS = ["ひとり","家族","友人","仕事"];
 // 歩数も実値へ移した(v16)。選択肢は画面の都合にすぎず、刻みを変えても過去の記録の意味は動かない
 var STEPS_N     = minRange(0, 20000, 1000);
 // 推移タブのY軸目盛りにも使い回すので、左余白(44px)に収まる短さが要件
-function fmtSteps(v){ return v === 0 ? "0" : (v >= 10000 ? (v/10000) + "万" : (v/1000) + "千"); }
+function fmtSteps(v){ return v + "歩"; }
+// 最上段は上限ではなく「これ以上」。天井に張り付いた記録が「ちょうど20000歩」に見えないようにする
+function fmtStepsOpt(v){ return v === STEPS_N[STEPS_N.length-1] ? v + "歩以上" : fmtSteps(v); }
 // 食べた/飲んだその場で1タップする項目。3回ぶんは entries に個別に持ち、達成は日単位へ畳む。
 // 週タブと目標では1行に見せる(3行に増やすと1日あたりの未達の面積が3倍になるため)
 var PERDAY = [
@@ -970,7 +972,7 @@ function viewLog(today){
   if (en.youtubeMin) y += row("YouTube","スクリーンタイムを転記",
     minSelect("youtubeMin", YT_MIN, e.youtubeMin!=null?e.youtubeMin:null, fmtDur));
   if (en.stepsCount) y += row("歩数","スマホの計測値を転記",
-    minSelect("stepsCount", STEPS_N, e.stepsCount!=null?e.stepsCount:null, fmtSteps));
+    minSelect("stepsCount", STEPS_N, e.stepsCount!=null?e.stepsCount:null, fmtStepsOpt));
   if (en.workMin) y += row("業務時間","目標は持たない(計測のみ)",
     minSelect("workMin", WORK_MIN, e.workMin!=null?e.workMin:null, fmtDur));
   if (en.workLoad) y += row("仕事の重さ","主観でOK(計測のみ)",
@@ -1543,7 +1545,7 @@ function viewSettings(){
   h += '</div></div>';
 
   h += '<p class="foot">データはこの端末のブラウザ(このアプリ)内にのみ保存されます。バックアップはJSONコピーで。'
-    + 'このアプリの役割は計測と週次フィードバックまで — 行動を変えるのは環境設計の仕事です。 v4.11</p>';
+    + 'このアプリの役割は計測と週次フィードバックまで — 行動を変えるのは環境設計の仕事です。 v4.12</p>';
   return h;
 }
 

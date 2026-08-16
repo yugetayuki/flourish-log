@@ -78,6 +78,17 @@ check("推移タブに起床時刻チャートがある", (await page.textConten
 const band = await page.locator('path[fill-opacity], line[stroke-opacity]').count();
 check("睡眠チャートに帯が描かれる", (await page.textContent("#view")).includes("睡眠(28日)") && band > 0, `帯の要素 ${band} 個`);
 
+// Y軸ラベルは左余白(L=44)の内側に右寄せで描く。はみ出しても SVG が黙って左端で切るだけなので、
+// 「20000歩」の先頭の2が消えても画面上は数字に見えてしまう。実測でしか気づけない
+const axisOverflow = await page.evaluate(() => {
+  const limit = 44 - 6;
+  return [...document.querySelectorAll('#view svg text[text-anchor="end"]')]
+    .map((t) => ({ s: t.textContent, w: t.getComputedTextLength() }))
+    .filter((x) => x.w > limit)
+    .map((x) => `${x.s}=${Math.round(x.w)}px`);
+});
+check("推移タブのY軸ラベルが左余白に収まる", axisOverflow.length === 0, axisOverflow.join(" / ") || "はみ出し無し");
+
 await page.getByRole("button", { name: "90日", exact: true }).click();
 check("期間を90日に切り替えられる", (await page.textContent("#view")).includes("就寝時刻(90日)"));
 await page.getByRole("button", { name: "28日", exact: true }).click();
