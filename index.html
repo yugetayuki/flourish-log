@@ -746,6 +746,10 @@ function viewLog(today){
   var e = S.entries[sel] || {};
   var d = parseD(sel);
   var minD = fmt(addDays(parseD(today), -7));
+  var maxD = fmt(addDays(parseD(today), 1));
+  // 明日ぶんを開いているときは、同じカードが「今夜」「今日」を指す。
+  // 見出しが「昨夜」のままだと、何を入れているのか分からなくなる
+  var ahead = sel > today;
   var en = S.enabled;
   var fields = [];
   if (en.bedtimeMin) fields.push(e.bedtimeMin!=null);
@@ -774,7 +778,7 @@ function viewLog(today){
     + '<button class="navbtn" data-dn="-1"'+(sel<=minD?' disabled':'')+'>‹</button>'
     + '<div class="datec"><div class="dateT">'+md(sel)+'('+WDAY[monIdx(d)]+')'+(sel===today?' ・今日':'')+'</div>'
     + '<div class="dateS mono">'+done+'/'+fields.length+' 入力</div></div>'
-    + '<button class="navbtn" data-dn="1"'+(sel>=today?' disabled':'')+'>›</button></div>';
+    + '<button class="navbtn" data-dn="1"'+(sel>=maxD?' disabled':'')+'>›</button></div>';
 
   if (sel===today && monIdx(parseD(today))===6) {
     h += '<button class="hintbtn" data-nav="review">日曜です — 週報タブでデータをコピーしてClaudeへ</button>';
@@ -784,7 +788,7 @@ function viewLog(today){
   if (en.bedtimeMin) night += row("就寝時刻","布団に入った時刻",
     minSelect("bedtimeMin", BEDTIME_MIN, e.bedtimeMin!=null?e.bedtimeMin:null, fmtHM));
   if (en.ashwagandha) night += row("アシュワガンダ","", pairBtn("ashwagandha", e.ashwagandha!=null?e.ashwagandha:null));
-  h += '<div class="card"><div class="chead"><span class="ctitle">昨夜</span></div>'+night+'</div>';
+  h += '<div class="card"><div class="chead"><span class="ctitle">'+(ahead?'今夜':'昨夜')+'</span></div>'+night+'</div>';
 
   var morn = '';
   // 就寝時刻と違い達成ラインを持たないので、超過を示す sienna は使わず睡眠系の indigo で統一する
@@ -801,7 +805,7 @@ function viewLog(today){
     }
     morn += row("体重測定","", winner);
   }
-  h += '<div class="card"><div class="chead"><span class="ctitle">今朝</span></div>'+morn+'</div>';
+  h += '<div class="card"><div class="chead"><span class="ctitle">'+(ahead?'明日の朝':'今朝')+'</span></div>'+morn+'</div>';
 
   var y = '';
   if (en.youtubeMin) y += row("YouTube","スクリーンタイムを転記",
@@ -826,7 +830,7 @@ function viewLog(today){
     seg("companion", COMPANION_OPTS, e.companion!=null?e.companion:null,
         ["on-gray","on-gray","on-gray","on-gray"]));
   S.custom.forEach(function(c){ y += row(c.label,"", pairBtn(c.id, e[c.id]!=null?e[c.id]:null)); });
-  h += '<div class="card"><div class="chead"><span class="ctitle">昨日</span></div>'+y+'</div>';
+  h += '<div class="card"><div class="chead"><span class="ctitle">'+(ahead?'今日':'昨日')+'</span></div>'+y+'</div>';
 
   // 他のカードと違い朝には埋まらない。その場で1タップする想定なので、指す時点も当日
   PERDAY.forEach(function(g){
@@ -1381,8 +1385,11 @@ document.addEventListener("click", function(ev){
   if (dn && !dn.disabled) {
     var today = fmt(new Date());
     var minD = fmt(addDays(parseD(today), -7));
+    // 明日まで進める。就寝時刻と前日の行動は夜のうちに確定しているので、
+    // 翌朝まで抱えて思い出すより、その場で入れた方が記録が正確になる
+    var maxD = fmt(addDays(parseD(today), 1));
     var nx = fmt(addDays(parseD(sel), +dn.dataset.dn));
-    if (nx >= minD && nx <= today) { sel = nx; render(); }
+    if (nx >= minD && nx <= maxD) { sel = nx; render(); }
     return;
   }
 

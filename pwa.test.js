@@ -2515,3 +2515,60 @@ describe("PWA v4.3: お風呂・肌ケア / マウスケア", () => {
     });
   });
 });
+
+describe("PWA v4.3: 明日ぶんの先取り入力", () => {
+  const AUG = "2026-08-16T21:00"; // 夜。翌日は 2026-08-17
+  const openLog = () => boot(undefined, withClock(AUG));
+  const nav = (dom, dn) => q(dom, `[data-dn="${dn}"]`);
+
+  // 就寝時刻と前日の行動は夜のうちに確定している。翌朝まで抱えて思い出すより、
+  // その場で入れた方が記録が正確になる
+  it("明日まで進めるが、その先へは進めない", () => {
+    const dom = openLog();
+    expect(nav(dom, 1).disabled).toBe(false);
+    nav(dom, 1).click();
+    expect(q(dom, ".dateT").textContent).toContain("8/17");
+    expect(nav(dom, 1).disabled).toBe(true); // 明後日は開かない
+  });
+
+  // 同じカードが指す時点が変わるので、見出しが「昨夜」のままだと何を入れているか分からなくなる
+  it("明日ぶんではカードの見出しが今夜・明日の朝・今日になる", () => {
+    const dom = openLog();
+    const titles = () => qa(dom, ".ctitle").map((el) => el.textContent);
+    expect(titles()).toEqual(expect.arrayContaining(["昨夜", "今朝", "昨日"]));
+    nav(dom, 1).click();
+    expect(titles()).toEqual(expect.arrayContaining(["今夜", "明日の朝", "今日"]));
+    nav(dom, -1).click();
+    expect(titles()).toEqual(expect.arrayContaining(["昨夜", "今朝", "昨日"]));
+  });
+
+  it("明日ぶんに入れた値は明日の日付キーに入る", () => {
+    const dom = openLog();
+    nav(dom, 1).click();
+    const s = q(dom, 'select[data-f="bedtimeMin"]');
+    s.value = "1320"; // 22:00
+    s.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
+    const saved = JSON.parse(dom.window.localStorage.getItem(KEY)).entries;
+    expect(saved["2026-08-17"]).toEqual({ bedtimeMin: 1320 });
+    expect(saved["2026-08-16"]).toBe(undefined);
+  });
+
+  // 未来日はまだ達成に数えない。日付が変わってから集計へ入る
+  it("明日ぶんの記録は今日の週集計に入らない", () => {
+    const f0 = boot().window.__flourish;
+    const d = f0.defaultData();
+    d.entries["2026-08-17"] = { gym: true };
+    const ws = f0.weekStart(new Date("2026-08-17T00:00"));
+    const s = f0.weekStats(d, ws, "2026-08-16");
+    const gym = s.items.find((it) => it.label === "ジム");
+    expect(gym.ok).toBe(0);
+    expect(gym.entered).toBe(0);
+  });
+
+  it("遡及入力の下限は変わらない(7日前まで)", () => {
+    const dom = openLog();
+    for (let i = 0; i < 7; i++) nav(dom, -1).click();
+    expect(q(dom, ".dateT").textContent).toContain("8/9");
+    expect(nav(dom, -1).disabled).toBe(true);
+  });
+});
