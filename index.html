@@ -63,6 +63,9 @@ h1{font-size:18px;font-weight:600;letter-spacing:.10em;margin:0}
 .on-sienna{background:var(--sienna)} .on-gray{background:#8A9388}
 .wv{margin-top:8px;width:100%;border:1px solid var(--line);background:var(--bg);
   border-radius:10px;padding:8px 12px;font-size:14px}
+/* box-sizing を指定しないと padding のぶん width:100% が親からはみ出す(input と違い textarea は
+   既定で content-box のまま効いてしまう)。resize:vertical は横に伸ばしてカードを壊させないため */
+.memo{box-sizing:border-box;resize:vertical;font-family:inherit;line-height:1.6}
 .datebar{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
 .navbtn{padding:8px 12px;border:1px solid var(--line);border-radius:10px;background:var(--card);font-size:15px}
 .navbtn:disabled{color:var(--dim)}
@@ -132,7 +135,7 @@ svg{display:block}
 <body>
 <div id="wrap">
   <header>
-    <div class="title"><h1>Aubade</h1><span class="eyebrow mono">DAWN&nbsp;LOG&nbsp;·&nbsp;v4.2</span></div>
+    <div class="title"><h1>Aubade</h1><span class="eyebrow mono">DAWN&nbsp;LOG&nbsp;·&nbsp;v4.3</span></div>
     <span id="saveState"></span>
   </header>
   <div id="banner"></div>
@@ -235,7 +238,7 @@ function md(s){ return (+s.slice(5,7))+"/"+(+s.slice(8,10)); }
 /* ================= データ ================= */
 function defaultData(){
   return {
-    version: 11,
+    version: 12,
     targets: {bedtimeMin:5, youtubeMin:5, ashwagandha:6, coffee:6, creatine:6, weight:5, gym:3, study:5, sauna:2, bath:6, mouth:6, protein:6, steps:5, sober:4, meal:5, supp:6},
     // 分の実値。境界は v8 までの選択肢と同じに保つ(24:00以内 / 1h以内)。
     // 入力が15分刻みになっても達成ラインは粗いままにする — 15分単位で締め上げられる状態は
@@ -284,10 +287,10 @@ function migrate(d){
   if (!isFinite(from)) from = 0;
   // v3 で lastBackup、v4 で起床時刻(wake)と朝コーヒー(coffee)、v5 でサウナ・歩数・休肝日・食事の節制、
   // v6 で整腸剤・サプリ、v7 でタンパク質、v8 で気分、v10 でお風呂・肌ケアとマウスケア、
-  // v11 で「誰と過ごしたか」を追加。
+  // v11 で「誰と過ごしたか」、v12 でひとこと(memo)を追加。
   // 追加した項目はいずれも欠損が既定値で埋まるので値の変換は要らない。
   // 値の変換が要るのは2つだけ: v7 の歩数4段階化と、v9 の就寝・起床・YouTube の分値化
-  o.version = 11;
+  o.version = 12;
   o.lastBackup = (d && typeof d.lastBackup === "string") ? d.lastBackup : null;
   o.targets = Object.assign({}, b.targets, isPlainObject(d && d.targets) ? d.targets : {});
   o.th = Object.assign({}, b.th, isPlainObject(d && d.th) ? d.th : {});
@@ -432,7 +435,7 @@ function csvCell(v){
   return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g,'""') + '"' : s;
 }
 function buildCSV(data){
-  var cols=["date","就寝時刻(分)","起床時刻(分)","眠れた感","YouTube(分)","アシュワガンダ","朝コーヒー","クレアチン","体重測定","体重","ジム","勉強","サウナ","お風呂・肌ケア","マウスケア","タンパク質","歩数","休肝日","誰と"]
+  var cols=["date","就寝時刻(分)","起床時刻(分)","眠れた感","YouTube(分)","アシュワガンダ","朝コーヒー","クレアチン","体重測定","体重","ジム","勉強","サウナ","お風呂・肌ケア","マウスケア","タンパク質","歩数","休肝日","誰と","ひとこと"]
     .concat(perDayParts().map(function(p){return p.label;}))
     .concat(MOOD.parts.map(function(p){return p.label+"の気分";}))
     .concat(data.custom.map(function(c){return c.label;}));
@@ -448,7 +451,9 @@ function buildCSV(data){
       e.youtubeMin!=null?e.youtubeMin:"",
       b(e.ashwagandha), b(e.coffee), b(e.creatine), b(e.weight), e.weightVal!=null?e.weightVal:"", b(e.gym), b(e.study),
       b(e.sauna), b(e.bath), b(e.mouth), b(e.protein), e.steps!=null?STEP_OPTS[e.steps]:"", b(e.sober),
-      e.companion!=null?COMPANION_OPTS[e.companion]:""]
+      e.companion!=null?COMPANION_OPTS[e.companion]:"",
+      // 自由入力なのでカンマ・引用符・改行を含みうる。csvCell が RFC4180 で囲う
+      e.memo!=null?e.memo:""]
       .concat(perDayParts().map(function(p){return b(e[p.id]);}))
       .concat(MOOD.parts.map(function(p){return e[p.id]!=null?MOOD_OPTS[e[p.id]]:"";}))
       .concat(data.custom.map(function(c){return b(e[c.id]);}));
@@ -528,6 +533,9 @@ var trendDays = TREND_OPTS[0];
 // 月間ビューの表示状態。trendDays と同じく保存しない(次に開くとき今月でよい)
 var monItem = null;  // null なら allItems の先頭
 var monOff = 0;      // 0 = 今月、負で過去へ
+// ひとこと欄を開いているか。保存しない(次に開いたときは畳まれた状態でよい)。
+// 保存すると、一度開いただけで以後ずっと朝の画面に自由入力欄が居座る
+var memoOpen = false;
 var expText = null, expNote = "", revText = null, revNote = "";
 var setNote = "", setNoteOk = false, armed = false, armTimer = null;
 var saveTimer = null;
@@ -839,6 +847,21 @@ function viewLog(today){
     });
     h += '<div class="card"><div class="chead"><span class="ctitle">'+esc(MOOD.card)+'</span></div>'+mi+'</div>'
       + '<p class="foot">'+esc(MOOD.note)+'</p>';
+  }
+
+  // 朝の動線の外に置く(設計制約3は「朝の入力は20秒以内」の話で、自由入力を全面禁止しては
+  // いない)。既定は閉じたままで、閉じている限り朝のタップ列に何も足さない。
+  // 記録済みの日は開いた状態で出す。閉じたままだと、書いたものが画面から消えて見える
+  var hasMemo = typeof e.memo === "string" && e.memo !== "";
+  if (memoOpen || hasMemo) {
+    h += '<div class="card"><div class="chead"><span class="ctitle">ひとこと</span></div>'
+      + '<textarea class="wv memo" id="memo" rows="3" maxlength="300" '
+      + 'placeholder="その日の出来事。数字に残らないことを1〜3行で">'
+      + esc(e.memo != null ? e.memo : "") + '</textarea></div>'
+      + '<p class="foot">達成判定も週次集計もしません。台帳(app-hub)にも出しません。'
+      + 'バックアップJSONには入るので、PCへ同期していればそちらに残ります。</p>';
+  } else {
+    h += '<button class="hintbtn" data-action="memo">ひとことを書く（任意）</button>';
   }
 
   h += '<p class="foot">欠損は失敗ではありません。1日抜けても習慣形成には実質影響しない、が実証の示すところです。</p>';
@@ -1305,7 +1328,7 @@ function viewSettings(){
   h += '</div></div>';
 
   h += '<p class="foot">データはこの端末のブラウザ(このアプリ)内にのみ保存されます。バックアップはJSONコピーで。'
-    + 'このアプリの役割は計測と週次フィードバックまで — 行動を変えるのは環境設計の仕事です。 v4.2</p>';
+    + 'このアプリの役割は計測と週次フィードバックまで — 行動を変えるのは環境設計の仕事です。 v4.3</p>';
   return h;
 }
 
@@ -1410,6 +1433,7 @@ document.addEventListener("click", function(ev){
     S.custom.push({id: "c_" + Date.now().toString(36), label: lab, target: 5});
     save(); render(); return;
   }
+  if (a === "memo") { memoOpen = true; render(); return; }
   if (a === "expcsv" || a === "expjson") {
     var isJson = a === "expjson";
     expText = isJson ? JSON.stringify(S, null, 2) : buildCSV(S);
@@ -1479,6 +1503,16 @@ document.addEventListener("change", function(ev){
     if (!/\d/.test(val)) val = "";
     if (val === "") delete e.weightVal; else e.weightVal = val;
     S.entries[sel] = e; save(); render(); return;
+  }
+  if (t.id === "memo") {
+    var me = Object.assign({}, S.entries[sel] || {});
+    // 前後の空白だけの入力は「書かなかった」と同じ。値の欠損はキー削除で表す約束に従う
+    var txt = (t.value || "").trim();
+    if (txt === "") delete me.memo; else me.memo = txt;
+    // 全フィールドが空になったら日付キーごと消す(他の入力経路と同じ規約)
+    if (Object.keys(me).length === 0) delete S.entries[sel];
+    else S.entries[sel] = me;
+    save(); render(); return;
   }
   if (t.id === "syncUrl") {
     var u = (t.value || "").trim();
