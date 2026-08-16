@@ -158,6 +158,47 @@ check("Service Worker が登録され有効になる", swState === "active", swS
 await page.reload();
 check("再読み込みで Service Worker の管理下に入る", await page.evaluate(() => !!navigator.serviceWorker.controller));
 
+// 勉強タイマー。JSDOM では「アプリを閉じている間も時間が進む」を再現できないので、
+// 実ブラウザで開始 → リロード（＝閉じて開き直しに相当）→ 停止まで通す。
+// 経過を待つ代わりに、保存された開始時刻を過去へずらして時間の経過を作る
+await page.goto(base);
+await page.getByRole("button", { name: "タイマー" }).click();
+await page.getByRole("button", { name: "▶ 開始" }).click();
+const tRunning = await page.evaluate(() => localStorage.getItem("flourish-log-v2-timer"));
+check("タイマーの開始時刻が別キーに残る", !!tRunning && JSON.parse(tRunning).startedAt > 0);
+check("本体データにタイマーの状態を混ぜない",
+  !(await page.evaluate(() => (localStorage.getItem("flourish-log-v2") || "").includes("startedAt"))));
+
+// 25分前に開始したことにして、リロードで復帰させる
+await page.evaluate(() => {
+  const t = JSON.parse(localStorage.getItem("flourish-log-v2-timer"));
+  t.startedAt -= 25 * 60000;
+  localStorage.setItem("flourish-log-v2-timer", JSON.stringify(t));
+});
+await page.reload();
+await page.getByRole("button", { name: "タイマー" }).click();
+const elapsedShown = await page.textContent("#view");
+check("閉じて開き直しても経過が続く", elapsedShown.includes("25分"), elapsedShown.match(/\d+分/)?.[0]);
+
+// 達成ライン th.studyMin が常にあるので、ブロブ全体ではなく entries だけを見る
+const beforeStop = await page.evaluate(() => {
+  const d = JSON.parse(localStorage.getItem("flourish-log-v2") || "{}");
+  return Object.values(d.entries || {}).filter((e) => typeof e.studyMin === "number").length;
+});
+await page.getByRole("button", { name: "■ 停止して記録" }).click();
+const afterStop = await page.evaluate(() => {
+  const d = JSON.parse(localStorage.getItem("flourish-log-v2"));
+  const days = Object.keys(d.entries).filter((k) => typeof d.entries[k].studyMin === "number");
+  return days.map((k) => k + "=" + d.entries[k].studyMin).join(",");
+});
+check("停止すると実時間が studyMin に入る", afterStop.includes("=25"), afterStop);
+check("停止でタイマーの状態が消える",
+  (await page.evaluate(() => localStorage.getItem("flourish-log-v2-timer"))) === null);
+check("停止前は studyMin が書かれていない", beforeStop === 0, "実測 " + beforeStop + " 件");
+// 記録タブに混ぜない（朝の入力の動線を汚さない）
+await page.getByRole("button", { name: "記録" }).click();
+check("記録タブにタイマーが出ない", !(await page.textContent("#view")).includes("停止して記録"));
+
 await context.setOffline(true);
 let offline = "";
 try {
