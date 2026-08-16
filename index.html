@@ -109,6 +109,8 @@ textarea{width:100%;border:1px solid var(--line);background:var(--bg);border-rad
 .sw.on .knob{left:21px}
 .srow{display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-top:1px solid var(--line)}
 select{border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:6px 8px;font-size:13px}
+/* 記録タブの分入力。font-size は 16px 未満だと iOS が focus 時に画面をズームする */
+.msel{width:100%;padding:10px 12px;font-size:16px}
 .addrow{display:flex;gap:8px;padding:8px 0;border-top:1px solid var(--line)}
 .addrow input{flex:1;border:1px solid var(--line);background:var(--bg);border-radius:10px;padding:8px 12px;font-size:13px}
 .addbtn{padding:0 14px;border-radius:10px;background:var(--pine);color:#fff;font-size:13px;font-weight:500}
@@ -143,17 +145,30 @@ svg{display:block}
 /* ================= 定数 ================= */
 var KEY = "flourish-log-v2";
 var BROKEN_PREFIX = KEY + "-broken-";
-// 保存されるのは選択肢のインデックスなので、後から刻みの境界を変えると過去の記録の意味が黙って変わる
-var BEDTIME_OPTS = ["〜23:00","〜23:30","〜24:00","〜24:30","以降"];
-var BEDTIME_VAL  = [23, 23.5, 24, 24.5, 25.2];
-var WAKE_OPTS    = ["〜6:00","〜6:30","〜7:00","〜7:30","以降"];
-var WAKE_VAL     = [6, 6.5, 7, 7.5, 8.2];
-// 達成ラインを持たない項目なので、週タブでは達成色/注意色ではなく indigo の濃淡で早い→遅いを示す
-var WAKE_OPACITY = [.4, .55, .7, .85, 1];
+// 就寝・起床・YouTube は選択肢のインデックスではなく実値(分)を保存する(v9)。
+// 選択肢のリストは画面の都合にすぎず、刻みを変えても過去の記録の意味は動かない。
+// 実値化の対象は物理量だけ。主観尺度(眠れた感・気分)と steps はインデックス保存のままで、
+// そちらは従来どおり刻みを変えない(主観に外部の実値は存在せず、細分化は疑似精度を生むだけ)
+function minRange(from, to, step){
+  var a = []; for (var v = from; v <= to; v += step) a.push(v);
+  return a;
+}
+var BEDTIME_MIN = minRange(1320, 1560, 15); // 22:00〜26:00
+var WAKE_MIN    = minRange(300, 600, 15);   // 5:00〜10:00
+var YT_MIN      = minRange(0, 480, 30);     // 0〜8h
+// 24時を超えた就寝は 25:12 のように繰り上がりのまま出す(日をまたいだことが読めるように)
+function fmtHM(v){ return Math.floor(v/60) + ":" + pad(v%60); }
+// YouTube は時刻ではなく時間量なので時計表記にしない。推移タブの左余白(44px)に収まる短さも要件
+function fmtDur(v){ return v < 60 ? v + "分" : (v % 60 === 0 ? (v/60) + "h" : (v/60).toFixed(1) + "h"); }
+// 達成ラインを持たない項目なので、週タブでは達成色/注意色ではなく indigo の濃淡で早い→遅いを示す。
+// 分値は連続なので添字ではなく式で出す(選択肢の端から導出。移行で入った格子外の値も clamp で収まる)
+function wakeOpacity(v){
+  var lo = WAKE_MIN[0], hi = WAKE_MIN[WAKE_MIN.length-1];
+  return .4 + .6 * Math.min(1, Math.max(0, (v - lo) / (hi - lo)));
+}
 var SLEEP_OPTS   = ["良","普通","悪"];
 // 気分は主観状態で直接コントロールできないので、眠れた感と同じく計測のみ(設計制約6)
 var MOOD_OPTS    = ["高","中","低"];
-var YT_OPTS      = ["<30分","〜1h","〜2h","2h超"];
 // 推移タブのY軸目盛りにも使い回すので、左余白(44px)に収まる短さにしてある
 var STEP_OPTS    = ["3千以下","5千","8千","1万以上"];
 // 食べた/飲んだその場で1タップする項目。3回ぶんは entries に個別に持ち、達成は日単位へ畳む。
@@ -186,8 +201,8 @@ var MOOD = {id:"mood", label:"今の気分", card:"今日の気分",
 var TREND_OPTS   = [28, 90];
 var WDAY = ["月","火","水","木","金","土","日"];
 var CORE = [
-  {id:"bedtime", label:"就寝時刻"},
-  {id:"youtube", label:"YouTube"},
+  {id:"bedtimeMin", label:"就寝時刻"},
+  {id:"youtubeMin", label:"YouTube"},
   {id:"ashwagandha", label:"アシュワガンダ"},
   {id:"coffee", label:"朝コーヒー"},
   {id:"creatine", label:"クレアチン"},
@@ -214,10 +229,13 @@ function md(s){ return (+s.slice(5,7))+"/"+(+s.slice(8,10)); }
 /* ================= データ ================= */
 function defaultData(){
   return {
-    version: 8,
-    targets: {bedtime:5, youtube:5, ashwagandha:6, coffee:6, creatine:6, weight:5, gym:3, study:5, sauna:2, protein:6, steps:5, sober:4, meal:5, supp:6},
-    th: {bedtime:2, youtube:1, steps:2},
-    enabled: {bedtime:true, wake:true, sleepFeel:true, youtube:true, ashwagandha:true, coffee:true, creatine:true, weight:true, gym:true, study:true, sauna:true, protein:true, steps:true, sober:true, meal:true, supp:true, mood:true},
+    version: 9,
+    targets: {bedtimeMin:5, youtubeMin:5, ashwagandha:6, coffee:6, creatine:6, weight:5, gym:3, study:5, sauna:2, protein:6, steps:5, sober:4, meal:5, supp:6},
+    // 分の実値。境界は v8 までの選択肢と同じに保つ(24:00以内 / 1h以内)。
+    // 入力が15分刻みになっても達成ラインは粗いままにする — 15分単位で締め上げられる状態は
+    // 完璧主義に対する逆向きのラチェットになるため(設計制約1の趣旨)
+    th: {bedtimeMin:1440, youtubeMin:60, steps:2},
+    enabled: {bedtimeMin:true, wakeMin:true, sleepFeel:true, youtubeMin:true, ashwagandha:true, coffee:true, creatine:true, weight:true, gym:true, study:true, sauna:true, protein:true, steps:true, sober:true, meal:true, supp:true, mood:true},
     custom: [],
     entries: {},
     lastBackup: null,
@@ -242,6 +260,15 @@ function normCustom(list){
 function shiftStep(v){
   return (typeof v === "number" && v >= 0 && v <= 2 && v === Math.round(v)) ? v + 1 : null;
 }
+// 就寝・起床・YouTube を分の実値へ移す際の読み替え(v9)。値はバケットの上端で、
+// 開区間(「以降」「2h超」)だけは旧チャートが使っていた慣行値(25.2h / 8.2h / 2.5h)に対応する。
+// **これは実測ではなく変換値**。15分格子に乗らないのはその名残で、乗らないこと自体が印になっている
+var BT_MIN9 = [1380, 1410, 1440, 1470, 1512];
+var WK_MIN9 = [360, 390, 420, 450, 492];
+var YT_MIN9 = [30, 60, 120, 150];
+function idxToMin(v, tbl){
+  return (typeof v === "number" && v >= 0 && v < tbl.length && v === Math.round(v)) ? tbl[v] : null;
+}
 function migrate(d){
   var b = defaultData();
   var o = Object.assign({}, b, isPlainObject(d) ? d : {});
@@ -252,8 +279,8 @@ function migrate(d){
   // v3 で lastBackup、v4 で起床時刻(wake)と朝コーヒー(coffee)、v5 でサウナ・歩数・休肝日・食事の節制、
   // v6 で整腸剤・サプリ、v7 でタンパク質、v8 で気分を追加。
   // 追加した項目はいずれも欠損が既定値で埋まるので値の変換は要らない。
-  // v7 の歩数4段階化だけは、保存済みのインデックスの意味が変わるので読み替えが要る
-  o.version = 8;
+  // 値の変換が要るのは2つだけ: v7 の歩数4段階化と、v9 の就寝・起床・YouTube の分値化
+  o.version = 9;
   o.lastBackup = (d && typeof d.lastBackup === "string") ? d.lastBackup : null;
   o.targets = Object.assign({}, b.targets, isPlainObject(d && d.targets) ? d.targets : {});
   o.th = Object.assign({}, b.th, isPlainObject(d && d.th) ? d.th : {});
@@ -275,13 +302,50 @@ function migrate(d){
     var t = isPlainObject(d && d.th) ? shiftStep(d.th.steps) : null;
     if (t !== null) o.th.steps = t;
   }
+  if (from < 9) {
+    // v7 と同じく、読み替えの要る日だけ複製して入力オブジェクトは書き換えない。
+    // 変換の起点は旧キーの存在なので、二度通しても新キーが再変換されることはない。
+    // 旧キーと新キーが両方ある入力(手で繋いだJSON)は新キーを優先し、旧キーだけ落とす
+    var MAP9 = [["bedtime","bedtimeMin",BT_MIN9],["wake","wakeMin",WK_MIN9],["youtube","youtubeMin",YT_MIN9]];
+    var moved = {};
+    Object.keys(o.entries).forEach(function(k){
+      var e = o.entries[k], copy = null;
+      if (isPlainObject(e)) MAP9.forEach(function(m){
+        if (!(m[0] in e)) return;
+        var v = idxToMin(e[m[0]], m[2]);
+        // 汚れた値で新キーも無いなら、変換も削除もせず旧キーのまま素通しする(entries 素通しの原則)
+        if (v === null && !(m[1] in e)) return;
+        if (!copy) copy = Object.assign({}, e);
+        if (!(m[1] in copy)) copy[m[1]] = v;
+        delete copy[m[0]];
+      });
+      moved[k] = copy || e;
+    });
+    o.entries = moved;
+    // th/targets/enabled も、既定値で埋まった後の o ではなく生の入力を見る(v7 と同じ理由)
+    var rth = isPlainObject(d && d.th) ? d.th : {};
+    if (!("bedtimeMin" in rth)) { var tb = idxToMin(rth.bedtime, BT_MIN9); if (tb !== null) o.th.bedtimeMin = tb; }
+    if (!("youtubeMin" in rth)) { var ty = idxToMin(rth.youtube, YT_MIN9); if (ty !== null) o.th.youtubeMin = ty; }
+    delete o.th.bedtime; delete o.th.youtube;
+    // targets は週の回数なので値の変換は要らない。改名だけ
+    var rtg = isPlainObject(d && d.targets) ? d.targets : {};
+    ["bedtime","youtube"].forEach(function(k){
+      if (!((k+"Min") in rtg) && typeof rtg[k] === "number") o.targets[k+"Min"] = rtg[k];
+      delete o.targets[k];
+    });
+    var ren = isPlainObject(d && d.enabled) ? d.enabled : {};
+    ["bedtime","wake","youtube"].forEach(function(k){
+      if (!((k+"Min") in ren) && (k in ren)) o.enabled[k+"Min"] = ren[k];
+      delete o.enabled[k];
+    });
+  }
   return o;
 }
 function achieved(data, e, id){
   if (!e) return null;
   // 達成の向きは項目ごとに違う。就寝・YouTube は小さいほど良く、歩数は大きいほど良い
-  if (id === "bedtime") return e.bedtime == null ? null : e.bedtime <= data.th.bedtime;
-  if (id === "youtube") return e.youtube == null ? null : e.youtube <= data.th.youtube;
+  if (id === "bedtimeMin") return e.bedtimeMin == null ? null : e.bedtimeMin <= data.th.bedtimeMin;
+  if (id === "youtubeMin") return e.youtubeMin == null ? null : e.youtubeMin <= data.th.youtubeMin;
   if (id === "steps") return e.steps == null ? null : e.steps >= data.th.steps;
   // 食事・サプリは3回ぶんの入力を1日の達成に畳む。記録しなかった回は失敗ではないので分母に入れない
   var g = perDay(id);
@@ -337,12 +401,21 @@ function weekStats(data, ws, today){
     });
     return arr;
   }
+  // 分の実値は段に属さないので度数分布にならない。その週に記録された値を昇順で渡し、
+  // 解釈は Claude 側に置く(週報の方針どおり)。日付との対応は渡さない
+  function vals(f){
+    var a=[];
+    days.forEach(function(dt){
+      var v=(data.entries[dt]||{})[f];
+      if (typeof v === "number" && isFinite(v)) a.push(v);
+    });
+    return a.sort(function(x,y){ return x-y; });
+  }
   var logged = days.filter(function(dt){ return dt<=today && data.entries[dt]; }).length;
   // 段数は選択肢配列から導く。書き写すと刻みを変えたとき最後の段が黙って集計から落ちる
   return {range: md(days[0])+"–"+md(days[6]), logged:logged, items:per,
-    bedtime:dist("bedtime",BEDTIME_OPTS.length), wake:dist("wake",WAKE_OPTS.length),
-    sleepFeel:dist("sleepFeel",SLEEP_OPTS.length),
-    youtube:dist("youtube",YT_OPTS.length), steps:dist("steps",STEP_OPTS.length),
+    bedtimeMin:vals("bedtimeMin"), wakeMin:vals("wakeMin"), youtubeMin:vals("youtubeMin"),
+    sleepFeel:dist("sleepFeel",SLEEP_OPTS.length), steps:dist("steps",STEP_OPTS.length),
     mood:MOOD.parts.map(function(p){ return dist(p.id, MOOD_OPTS.length); })};
 }
 // カスタム項目のラベルは自由入力なので、カンマ/引用符/改行で列がずれないよう RFC4180 で囲う
@@ -351,7 +424,7 @@ function csvCell(v){
   return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g,'""') + '"' : s;
 }
 function buildCSV(data){
-  var cols=["date","就寝時刻","起床時刻","眠れた感","YouTube","アシュワガンダ","朝コーヒー","クレアチン","体重測定","体重","ジム","勉強","サウナ","タンパク質","歩数","休肝日"]
+  var cols=["date","就寝時刻(分)","起床時刻(分)","眠れた感","YouTube(分)","アシュワガンダ","朝コーヒー","クレアチン","体重測定","体重","ジム","勉強","サウナ","タンパク質","歩数","休肝日"]
     .concat(perDayParts().map(function(p){return p.label;}))
     .concat(MOOD.parts.map(function(p){return p.label+"の気分";}))
     .concat(data.custom.map(function(c){return c.label;}));
@@ -360,10 +433,11 @@ function buildCSV(data){
   Object.keys(data.entries).sort().forEach(function(dt){
     var e=data.entries[dt];
     var row=[dt,
-      e.bedtime!=null?BEDTIME_OPTS[e.bedtime]:"",
-      e.wake!=null?WAKE_OPTS[e.wake]:"",
+      // 分の実値をそのまま出す。整形は読む側の仕事で、列名に単位を書いてある
+      e.bedtimeMin!=null?e.bedtimeMin:"",
+      e.wakeMin!=null?e.wakeMin:"",
       e.sleepFeel!=null?SLEEP_OPTS[e.sleepFeel]:"",
-      e.youtube!=null?YT_OPTS[e.youtube]:"",
+      e.youtubeMin!=null?e.youtubeMin:"",
       b(e.ashwagandha), b(e.coffee), b(e.creatine), b(e.weight), e.weightVal!=null?e.weightVal:"", b(e.gym), b(e.study),
       b(e.sauna), b(e.protein), e.steps!=null?STEP_OPTS[e.steps]:"", b(e.sober)]
       .concat(perDayParts().map(function(p){return b(e[p.id]);}))
@@ -379,13 +453,15 @@ function buildReviewText(data, today){
   var p = weekStats(data, addDays(ws,-7), today);
   return "【Aubade 週報データ " + s.range + "】\n"
     + "以下のデータで週次レビューを書いてください。形式: 【事実】3行以内 / 【解釈】2行以内(推測と明示) / 【来週の一点】1つだけ具体的に。責めない・説教しない・淡々と。環境設計(摩擦の調整)の観点で提案。\n"
-    + "凡例: bedtime=["+BEDTIME_OPTS.join(",")+"] wake=["+WAKE_OPTS.join(",")+"] sleepFeel=["+SLEEP_OPTS.join(",")+"] youtube=["+YT_OPTS.join(",")+"] steps=["+STEP_OPTS.join(",")+"] mood=["+MOOD_OPTS.join(",")+"]\n"
+    + "凡例: sleepFeel=["+SLEEP_OPTS.join(",")+"] steps=["+STEP_OPTS.join(",")+"] mood=["+MOOD_OPTS.join(",")+"]\n"
+    + "bedtimeMin / wakeMin / youtubeMin は分の実値を昇順に並べたものです"
+    + "(就寝は 24:00=1440 で、24時を超えた日は1440超。YouTube は視聴した分数)。\n"
     + "mood は["+MOOD.parts.map(function(p){return p.label;}).join(",")+"]の3枠ぶんの分布で、各枠が上の凡例の並びです。"
     + "気分は計測のみで達成判定の対象ではありません。"
-    + "ここで渡しているのはどの項目も1週間ぶんの分布だけで、日ごとの対応は入っていません。"
+    + "ここで渡しているのはどの項目も1週間ぶんの分布か値の一覧だけで、日ごとの対応は入っていません。"
     + "「アシュワガンダを飲んだ日の翌朝の気分」のような日単位の突き合わせはこのデータからはできないので、"
     + "推測で書かないでください(日単位の相関はアプリ側の相関ヒントが受け持ちます)。\n"
-    + "wake(起床時刻)は計測のみで、達成判定の対象ではありません。\n"
+    + "wakeMin(起床時刻)は計測のみで、達成判定の対象ではありません。\n"
     + "休肝日は酒を飲まなかった日として数えています。タンパク質は前日に規定量以上とれた日として数えています。"
     + "食事の節制と整腸剤・サプリは1日3回ぶんを記録し、"
     + "記録した回がすべて達成なら1日ぶんの達成です(記録しなかった回は数えません)。\n"
@@ -625,6 +701,20 @@ function pairBtn(f, val, lab){
   return '<div class="seg" style="grid-template-columns:1fr 1fr">'
     + b("t", lab.t || "✓ した") + b("f", lab.f || "✗ しなかった") + '</div>';
 }
+// 分の実値を選ぶ select。空欄「—」が未入力で、選び直せば未入力へ戻せる(seg の同値タップに相当)。
+// 保存値が選択肢に無いとき(v9 で移行した「以降」相当の 1512 / 492 など)だけ、その値の option を足す。
+// 足さないと、値があるのに無選択で描かれ、見えないまま別の値を選んだ瞬間に消える
+function minSelect(f, opts, val, fmt){
+  var list = opts;
+  if (val != null && opts.indexOf(val) < 0) {
+    list = opts.concat([val]).sort(function(a,b){ return a-b; });
+  }
+  var h = '<select class="msel" data-f="'+esc(f)+'"><option value=""'+(val==null?' selected':'')+'>—</option>';
+  list.forEach(function(v){
+    h += '<option value="'+v+'"'+(val===v?' selected':'')+'>'+esc(fmt(v))+'</option>';
+  });
+  return h + '</select>';
+}
 function row(label, sub, inner){
   return '<div class="row"><div class="rowhead"><span class="lbl">'+esc(label)+'</span>'
     + (sub ? '<span class="sub">'+esc(sub)+'</span>' : '') + '</div>' + inner + '</div>';
@@ -637,10 +727,10 @@ function viewLog(today){
   var minD = fmt(addDays(parseD(today), -7));
   var en = S.enabled;
   var fields = [];
-  if (en.bedtime) fields.push(e.bedtime!=null);
-  if (en.wake) fields.push(e.wake!=null);
+  if (en.bedtimeMin) fields.push(e.bedtimeMin!=null);
+  if (en.wakeMin) fields.push(e.wakeMin!=null);
   if (en.sleepFeel) fields.push(e.sleepFeel!=null);
-  if (en.youtube) fields.push(e.youtube!=null);
+  if (en.youtubeMin) fields.push(e.youtubeMin!=null);
   if (en.ashwagandha) fields.push(e.ashwagandha!=null);
   if (en.coffee) fields.push(e.coffee!=null);
   if (en.creatine) fields.push(e.creatine!=null);
@@ -667,15 +757,15 @@ function viewLog(today){
   }
 
   var night = '';
-  if (en.bedtime) night += row("就寝時刻","布団に入った時刻",
-    seg("bedtime", BEDTIME_OPTS, e.bedtime!=null?e.bedtime:null, ["on-indigo","on-indigo","on-indigo","on-indigo","on-sienna"]));
+  if (en.bedtimeMin) night += row("就寝時刻","布団に入った時刻",
+    minSelect("bedtimeMin", BEDTIME_MIN, e.bedtimeMin!=null?e.bedtimeMin:null, fmtHM));
   if (en.ashwagandha) night += row("アシュワガンダ","", pairBtn("ashwagandha", e.ashwagandha!=null?e.ashwagandha:null));
   h += '<div class="card"><div class="chead"><span class="ctitle">昨夜</span></div>'+night+'</div>';
 
   var morn = '';
   // 就寝時刻と違い達成ラインを持たないので、超過を示す sienna は使わず睡眠系の indigo で統一する
-  if (en.wake) morn += row("起床時刻","布団を出た時刻",
-    seg("wake", WAKE_OPTS, e.wake!=null?e.wake:null, ["on-indigo","on-indigo","on-indigo","on-indigo","on-indigo"]));
+  if (en.wakeMin) morn += row("起床時刻","布団を出た時刻",
+    minSelect("wakeMin", WAKE_MIN, e.wakeMin!=null?e.wakeMin:null, fmtHM));
   if (en.sleepFeel) morn += row("眠れた感","主観でOK",
     seg("sleepFeel", SLEEP_OPTS, e.sleepFeel!=null?e.sleepFeel:null, ["on-pine","on-gray","on-sienna"]));
   if (en.coffee) morn += row("朝コーヒー","", pairBtn("coffee", e.coffee!=null?e.coffee:null));
@@ -690,8 +780,8 @@ function viewLog(today){
   h += '<div class="card"><div class="chead"><span class="ctitle">今朝</span></div>'+morn+'</div>';
 
   var y = '';
-  if (en.youtube) y += row("YouTube","スクリーンタイムを転記",
-    seg("youtube", YT_OPTS, e.youtube!=null?e.youtube:null, ["on-pine","on-pine","on-sienna","on-sienna"]));
+  if (en.youtubeMin) y += row("YouTube","スクリーンタイムを転記",
+    minSelect("youtubeMin", YT_MIN, e.youtubeMin!=null?e.youtubeMin:null, fmtDur));
   // 既定の達成ライン(th.steps=2)に合わせて、達成側を pine・未達側を sienna にしてある
   if (en.steps) y += row("歩数","スマホの計測値を転記",
     seg("steps", STEP_OPTS, e.steps!=null?e.steps:null, ["on-sienna","on-sienna","on-pine","on-pine"]));
@@ -764,14 +854,14 @@ function viewWeek(today){
       + '<div class="dots">'+dots+'</div></div>';
   });
 
-  if (S.enabled.wake) {
+  if (S.enabled.wakeMin) {
     var wd='';
     days.forEach(function(dt){
       if (dt > today) { wd += '<span class="dot fut"></span>'; return; }
-      var v = (S.entries[dt]||{}).wake;
+      var v = (S.entries[dt]||{}).wakeMin;
       if (v == null) { wd += '<span class="dot miss"></span>'; return; }
       // 見たいのは良し悪しではなく起床時刻のばらつきなので、濃淡だけで早い→遅いを示す
-      wd += '<span class="dot" style="background:var(--indigo);opacity:'+WAKE_OPACITY[v]+'"></span>';
+      wd += '<span class="dot" style="background:var(--indigo);opacity:'+wakeOpacity(v)+'"></span>';
     });
     h += '<div class="wrow"><div class="wname"><span class="wl">起床時刻</span><span class="wc" style="color:var(--sub)">計測のみ</span></div>'
       + '<div class="dots">'+wd+'</div></div>';
@@ -833,8 +923,10 @@ function svgChart(rows, key, yMin, yMax, yTicks, refY, color){
 // 就寝と起床を同じ時刻軸に載せ、その間隔で睡眠の長さを示す。長さを「◯時間」と数値では出さない。
 // 両端は選択肢の遅い側の端であって実測ではないので、断定するとバケット幅の誤差が見えなくなる
 function svgSleep(rows){
-  var yMin=22.8, yMax=32.4;
-  var yTicks=[{v:23,l:"23:00"},{v:25,l:"1:00"},{v:27,l:"3:00"},{v:29,l:"5:00"},{v:31,l:"7:00"}];
+  // 就寝(22:00〜26:00)と翌朝の起床(+24 で 29:00〜34:00)の両方を覆う。範囲は選択肢から導く
+  var yMin=BEDTIME_MIN[0]/60-0.2, yMax=WAKE_MIN[WAKE_MIN.length-1]/60+24+0.2;
+  var yTicks=[];
+  for (var sv=Math.ceil(yMin); sv<=Math.floor(yMax); sv+=2) yTicks.push({v:sv, l:fmtHM((sv%24)*60)});
   var W=320, H=150, L=44, R=8, T=8, B=20;
   var iw = W-L-R, ih = H-T-B;
   function X(i){ return L + (rows.length<=1 ? 0 : i/(rows.length-1)*iw); }
@@ -930,11 +1022,12 @@ function viewTrend(today){
     // NaN が軸の目盛りと折れ線の座標に伝播しないよう読み出し側で数値か確かめる
     var wn = Number(e.weightVal);
     rows.push({d: md(dt),
-      bed: e.bedtime!=null ? BEDTIME_VAL[e.bedtime] : null,
-      wake: e.wake!=null ? WAKE_VAL[e.wake] : null,
+      // 分の実値をそのまま時角へ。旧 BEDTIME_VAL / WAKE_VAL の対応表は役目を終えた
+      bed: e.bedtimeMin!=null ? e.bedtimeMin/60 : null,
+      wake: e.wakeMin!=null ? e.wakeMin/60 : null,
       // 帯グラフでは就寝と同じ時刻軸に載せるので、翌朝であることを +24 で表す
-      wakeAbs: e.wake!=null ? WAKE_VAL[e.wake]+24 : null,
-      yt: e.youtube!=null ? e.youtube : null,
+      wakeAbs: e.wakeMin!=null ? e.wakeMin/60+24 : null,
+      yt: e.youtubeMin!=null ? e.youtubeMin : null,
       steps: e.steps!=null ? e.steps : null,
       w: (e.weightVal!=null && e.weightVal!=="" && isFinite(wn)) ? wn : null});
   }
@@ -946,27 +1039,36 @@ function viewTrend(today){
   });
   h += '</div>';
 
-  var bedT=[{v:23,l:"23:00"},{v:23.5,l:"23:30"},{v:24,l:"24:00"},{v:24.5,l:"24:30"},{v:25.2,l:"以降"}];
-  var ytT=YT_OPTS.map(function(o,i){return {v:i,l:o};});
+  // 目盛りは選択肢の範囲から1時間刻みで導く。刻みを変えても軸が勝手に付いてくる
+  function hourTicks(opts){
+    var a=[], lo=Math.ceil(opts[0]/60), hi=Math.floor(opts[opts.length-1]/60);
+    for (var x=lo; x<=hi; x++) a.push({v:x, l:fmtHM(x*60)});
+    return a;
+  }
+  var bedLo = BEDTIME_MIN[0]/60, bedHi = BEDTIME_MIN[BEDTIME_MIN.length-1]/60;
+  var wakeLo = WAKE_MIN[0]/60, wakeHi = WAKE_MIN[WAKE_MIN.length-1]/60;
   h += '<div class="card"><div class="chead"><span class="ctitle">就寝時刻'+lab+'</span></div><div class="chartbox">'
-    + svgChart(rows,"bed",22.8,25.4,bedT,BEDTIME_VAL[S.th.bedtime],"#43507A") + '</div></div>';
-  var wakeT=[{v:6,l:"6:00"},{v:6.5,l:"6:30"},{v:7,l:"7:00"},{v:7.5,l:"7:30"},{v:8.2,l:"以降"}];
+    + svgChart(rows,"bed",bedLo-0.2,bedHi+0.2,hourTicks(BEDTIME_MIN),S.th.bedtimeMin/60,"#43507A") + '</div></div>';
   // 達成ラインを持たない項目なので基準線(refY)は引かない
   h += '<div class="card"><div class="chead"><span class="ctitle">起床時刻'+lab+'</span></div><div class="chartbox">'
-    + svgChart(rows,"wake",5.8,8.4,wakeT,null,"#43507A") + '</div></div>';
+    + svgChart(rows,"wake",wakeLo-0.2,wakeHi+0.2,hourTicks(WAKE_MIN),null,"#43507A") + '</div></div>';
 
   // 体重チャートと同じく、描くものがある日が出てから表示する
   if (rows.some(function(r){ return r.bed!=null && r.wakeAbs!=null; })) {
     h += '<div class="card"><div class="chead"><span class="ctitle">睡眠'+lab+'</span></div><div class="chartbox">'
       + svgSleep(rows) + '</div>'
       + '<p class="foot">上の線が起床、下の線が就寝で、帯の広さがおおよその睡眠の長さです。'
-      + '各点は選んだ選択肢の遅い側の端(「〜23:30」なら23:30)なので、実際の時刻は最大30分早い側にあります。</p></div>';
+      + 'v3.1 までの記録は選択肢の遅い側の端(「〜23:30」なら23:30)で、実際の時刻は最大30分早い側にあります。'
+      + 'v4.0 以降は選んだ時刻そのものです。</p></div>';
   } else {
     h += '<p class="foot">就寝と起床の両方を記録した日ができると、ここに睡眠の帯が表示されます。</p>';
   }
 
+  // 分軸。目盛りは2時間ごとに置く(左余白44pxに収まる短さが要件)
+  var ytHi = YT_MIN[YT_MIN.length-1], ytT=[];
+  for (var yv=0; yv<=ytHi; yv+=120) ytT.push({v:yv, l:fmtDur(yv)});
   h += '<div class="card"><div class="chead"><span class="ctitle">YouTube'+lab+'</span></div><div class="chartbox">'
-    + svgChart(rows,"yt",-0.2,YT_OPTS.length-1+0.2,ytT,S.th.youtube,"#A9663B") + '</div></div>';
+    + svgChart(rows,"yt",-ytHi*0.04,ytHi*1.04,ytT,S.th.youtubeMin,"#A9663B") + '</div></div>';
   var stT=STEP_OPTS.map(function(o,i){return {v:i,l:o};});
   h += '<div class="card"><div class="chead"><span class="ctitle">歩数'+lab+'</span></div><div class="chartbox">'
     + svgChart(rows,"steps",-0.2,STEP_OPTS.length-1+0.2,stT,S.th.steps,"#3E6B4F") + '</div></div>';
@@ -1015,13 +1117,13 @@ function viewReview(today){
     // 昼・晩は日中の出来事が挟まって向きが読めなくなるため(掘り下げは週報→Claude 側に置く)
     function moodAM(e){ return e.moodM==null?null:e.moodM===0; }
     var defs=[
-      {l:"就寝が達成ライン内 × 眠れた感「良」", ps:mk(function(e){return e.bedtime==null?null:e.bedtime<=S.th.bedtime;}, function(e){return e.sleepFeel==null?null:e.sleepFeel===0;})},
-      {l:"起床が〜6:30以内 × 眠れた感「良」", ps:mk(function(e){return e.wake==null?null:e.wake<=1;}, function(e){return e.sleepFeel==null?null:e.sleepFeel===0;})},
-      {l:"YouTube多め(〜2h以上) × 就寝が遅い", ps:mk(function(e){return e.youtube==null?null:e.youtube>=2;}, function(e){return e.bedtime==null?null:e.bedtime>S.th.bedtime;})},
+      {l:"就寝が達成ライン内 × 眠れた感「良」", ps:mk(function(e){return e.bedtimeMin==null?null:e.bedtimeMin<=S.th.bedtimeMin;}, function(e){return e.sleepFeel==null?null:e.sleepFeel===0;})},
+      {l:"起床が〜6:30以内 × 眠れた感「良」", ps:mk(function(e){return e.wakeMin==null?null:e.wakeMin<=390;}, function(e){return e.sleepFeel==null?null:e.sleepFeel===0;})},
+      {l:"YouTube多め(〜2h以上) × 就寝が遅い", ps:mk(function(e){return e.youtubeMin==null?null:e.youtubeMin>60;}, function(e){return e.bedtimeMin==null?null:e.bedtimeMin>S.th.bedtimeMin;})},
       {l:"アシュワガンダを飲んだ × 眠れた感「良」", ps:mk(function(e){return e.ashwagandha==null?null:e.ashwagandha===true;}, function(e){return e.sleepFeel==null?null:e.sleepFeel===0;})},
-      {l:"就寝が達成ライン内 × 起床が〜6:30以内", ps:mk(function(e){return e.bedtime==null?null:e.bedtime<=S.th.bedtime;}, function(e){return e.wake==null?null:e.wake<=1;})},
+      {l:"就寝が達成ライン内 × 起床が〜6:30以内", ps:mk(function(e){return e.bedtimeMin==null?null:e.bedtimeMin<=S.th.bedtimeMin;}, function(e){return e.wakeMin==null?null:e.wakeMin<=390;})},
       {l:"ジムをした × 眠れた感「良」", ps:mk(function(e){return e.gym==null?null:e.gym===true;}, function(e){return e.sleepFeel==null?null:e.sleepFeel===0;})},
-      {l:"勉強した × YouTube多め", ps:mk(function(e){return e.study==null?null:e.study===true;}, function(e){return e.youtube==null?null:e.youtube>=2;})},
+      {l:"勉強した × YouTube多め", ps:mk(function(e){return e.study==null?null:e.study===true;}, function(e){return e.youtubeMin==null?null:e.youtubeMin>60;})},
       // 休肝日・サウナ・歩数はいずれも前日を指すので、当朝の眠れた感とは同じ一夜を挟んで並ぶ
       {l:"前日に酒を飲んだ × 眠れた感「良」", ps:mk(function(e){return e.sober==null?null:e.sober===false;}, function(e){return e.sleepFeel==null?null:e.sleepFeel===0;})},
       {l:"サウナに入った × 眠れた感「良」", ps:mk(function(e){return e.sauna==null?null:e.sauna===true;}, function(e){return e.sleepFeel==null?null:e.sleepFeel===0;})},
@@ -1031,7 +1133,7 @@ function viewReview(today){
       {l:"朝コーヒーを飲んだ × 朝の気分「高」", ps:mk(function(e){return e.coffee==null?null:e.coffee===true;}, moodAM)},
       {l:"アシュワガンダを飲んだ × 朝の気分「高」", ps:mk(function(e){return e.ashwagandha==null?null:e.ashwagandha===true;}, moodAM)},
       {l:"眠れた感「良」× 朝の気分「高」", ps:mk(function(e){return e.sleepFeel==null?null:e.sleepFeel===0;}, moodAM)},
-      {l:"就寝が達成ライン内 × 朝の気分「高」", ps:mk(function(e){return e.bedtime==null?null:e.bedtime<=S.th.bedtime;}, moodAM)},
+      {l:"就寝が達成ライン内 × 朝の気分「高」", ps:mk(function(e){return e.bedtimeMin==null?null:e.bedtimeMin<=S.th.bedtimeMin;}, moodAM)},
       {l:"前日に酒を飲んだ × 朝の気分「高」", ps:mk(function(e){return e.sober==null?null:e.sober===false;}, moodAM)},
       {l:"ジムをした × 朝の気分「高」", ps:mk(function(e){return e.gym==null?null:e.gym===true;}, moodAM)},
       {l:"歩数が達成ライン以上 × 朝の気分「高」", ps:mk(function(e){return e.steps==null?null:e.steps>=S.th.steps;}, moodAM)},
@@ -1096,11 +1198,13 @@ function viewSettings(){
   h += '</div>';
 
   h += '<div class="card"><div class="chead"><span class="ctitle">達成ライン</span></div>';
-  h += '<div class="srow"><span style="font-size:14px">就寝時刻</span><select data-th="bedtime">';
-  BEDTIME_OPTS.slice(0,4).forEach(function(o,i){ h += '<option value="'+i+'"'+(S.th.bedtime===i?' selected':'')+'>'+esc(o)+' 以内</option>'; });
+  // 入力が15分刻みでも達成ラインの境界は v8 までと同じ粗さに保つ。15分単位で締め上げられる状態は
+  // 完璧主義に対する逆向きのラチェットになるため(設計制約1の趣旨)。刻みを揃えたくなったら要相談
+  h += '<div class="srow"><span style="font-size:14px">就寝時刻</span><select data-th="bedtimeMin">';
+  [1380,1410,1440,1470].forEach(function(v){ h += '<option value="'+v+'"'+(S.th.bedtimeMin===v?' selected':'')+'>'+esc(fmtHM(v))+' 以内</option>'; });
   h += '</select></div>';
-  h += '<div class="srow"><span style="font-size:14px">YouTube</span><select data-th="youtube">';
-  YT_OPTS.slice(0,3).forEach(function(o,i){ h += '<option value="'+i+'"'+(S.th.youtube===i?' selected':'')+'>'+esc(o)+' 以内</option>'; });
+  h += '<div class="srow"><span style="font-size:14px">YouTube</span><select data-th="youtubeMin">';
+  [30,60,120].forEach(function(v){ h += '<option value="'+v+'"'+(S.th.youtubeMin===v?' selected':'')+'>'+esc(fmtDur(v))+' 以内</option>'; });
   h += '</select></div>';
   // 歩数だけは「以上で達成」の向き。最下段を選べるようにすると全ての日が達成になるので出さない
   h += '<div class="srow"><span style="font-size:14px">歩数</span><select data-th="steps">';
@@ -1108,7 +1212,7 @@ function viewSettings(){
   h += '</select></div></div>';
 
   h += '<div class="card"><div class="chead"><span class="ctitle">表示する項目</span></div>';
-  var togs=[["bedtime","就寝時刻"],["wake","起床時刻"],["sleepFeel","眠れた感"],["youtube","YouTube"],["ashwagandha","アシュワガンダ"],["coffee","朝コーヒー"],["creatine","クレアチン"],["weight","体重測定"],["gym","ジム"],["study","勉強"],["sauna","サウナ"],["protein","タンパク質"],["steps","歩数"],["sober","休肝日"]]
+  var togs=[["bedtimeMin","就寝時刻"],["wakeMin","起床時刻"],["sleepFeel","眠れた感"],["youtubeMin","YouTube"],["ashwagandha","アシュワガンダ"],["coffee","朝コーヒー"],["creatine","クレアチン"],["weight","体重測定"],["gym","ジム"],["study","勉強"],["sauna","サウナ"],["protein","タンパク質"],["steps","歩数"],["sober","休肝日"]]
     .concat(PERDAY.map(function(g){ return [g.id, g.label]; }))
     .concat([[MOOD.id, MOOD.label]]);
   togs.forEach(function(t){
@@ -1233,7 +1337,8 @@ document.addEventListener("click", function(ev){
     return;
   }
 
-  var sb = t.closest("[data-f]");
+  // data-f は select(分の実値)も持つが data-v を持たない。ここで拾うとタップだけで値が入る
+  var sb = t.closest("[data-f][data-v]");
   if (sb) {
     var f = sb.dataset.f, raw = sb.dataset.v;
     var v = raw==="t" ? true : raw==="f" ? false : parseInt(raw,10);
@@ -1367,6 +1472,15 @@ document.addEventListener("change", function(ev){
     }
     syncCfg.token = tok; saveSync(); syncNote = null; render(); return;
   }
+  // 分の実値の select。空欄はキー削除で未入力へ戻す(欠損は null を書かずキーごと消す規約)
+  var ms = t.closest("select[data-f]");
+  if (ms) {
+    var mf = ms.dataset.f, me = Object.assign({}, S.entries[sel] || {});
+    if (t.value === "") delete me[mf]; else me[mf] = +t.value;
+    if (Object.keys(me).length === 0) delete S.entries[sel];
+    else S.entries[sel] = me;
+    save(); render(); return;
+  }
   var mn = t.closest("[data-mon]");
   if (mn) { monItem = t.value; render(); return; }
   var th = t.closest("[data-th]");
@@ -1386,6 +1500,7 @@ window.__flourish = {
   syncPush: syncPush, scheduleSync: scheduleSync, syncUrlOk: syncUrlOk,
   // 項目一覧と段階の刻みはここが真実の出所。テスト側で書き写すと、増やしたときに書き写しだけが腐る
   CORE: CORE, PERDAY: PERDAY, STEP_OPTS: STEP_OPTS, MOOD: MOOD, MOOD_OPTS: MOOD_OPTS,
+  BEDTIME_MIN: BEDTIME_MIN, WAKE_MIN: WAKE_MIN, YT_MIN: YT_MIN, fmtHM: fmtHM, fmtDur: fmtDur,
 };
 
 render();

@@ -21,6 +21,12 @@ const qa = (dom, s) => [...dom.window.document.querySelectorAll(s)];
 const byText = (dom, sel, text) => qa(dom, sel).find((el) => el.textContent.trim() === text);
 const tick = () => new Promise((r) => setTimeout(r, 0));
 const stubClipboard = (dom, impl) => { dom.window.navigator.clipboard = { writeText: impl }; };
+// 分の実値は select。change を発火させないと保存されない
+const pickMin = (dom, f, v) => {
+  const s = dom.window.document.querySelector(`select[data-f="${f}"]`);
+  s.value = v;
+  s.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
+};
 
 // アプリは new Date() を直接読むので、JSDOM 側の Date を差し替えて日付またぎを再現する
 const withClock = (iso) => (w) => {
@@ -78,13 +84,19 @@ describe("PWA v3.1: 保存と復元", () => {
     expect(q(dom, "#saveState").textContent).toBe("✓ 保存済み");
   });
 
-  it("同じボタン2回タップ→未入力(削除)に戻る", () => {
+  // 分の実値は select。空欄「—」が seg の同値タップに相当する未入力への戻り道
+  it("select で選び直して空欄にすると未入力(削除)に戻る", () => {
     const dom = boot();
-    const btn = () => byText(dom, "button.sb", "〜23:00");
-    btn().click();
-    btn().click(); // 再描画後の同ラベルボタンを取り直してタップ
-    const saved = JSON.parse(dom.window.localStorage.getItem(KEY));
-    expect(Object.keys(saved.entries).length).toBe(0);
+    const pick = (v) => {
+      const s = q(dom, 'select[data-f="bedtimeMin"]');
+      s.value = v;
+      s.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
+    };
+    pick("1380"); // 23:00
+    const today = dom.window.__flourish.fmt(new Date());
+    expect(JSON.parse(dom.window.localStorage.getItem(KEY)).entries[today].bedtimeMin).toBe(1380);
+    pick("");
+    expect(Object.keys(JSON.parse(dom.window.localStorage.getItem(KEY)).entries).length).toBe(0);
   });
 
   it("再起動(別インスタンス)で前回データが復元される", () => {
@@ -101,9 +113,9 @@ describe("PWA v3.1: ロジック(移植の同一性)", () => {
   it("achieved: 就寝ライン/チェック/未入力", () => {
     const f = boot().window.__flourish;
     const d = f.defaultData();
-    expect(f.achieved(d, { bedtime: 2 }, "bedtime")).toBe(true);
-    expect(f.achieved(d, { bedtime: 4 }, "bedtime")).toBe(false);
-    expect(f.achieved(d, {}, "bedtime")).toBe(null);
+    expect(f.achieved(d, { bedtimeMin: 1440 }, "bedtimeMin")).toBe(true);
+    expect(f.achieved(d, { bedtimeMin: 1500 }, "bedtimeMin")).toBe(false);
+    expect(f.achieved(d, {}, "bedtimeMin")).toBe(null);
     expect(f.achieved(d, { gym: false }, "gym")).toBe(false);
   });
 
@@ -117,10 +129,11 @@ describe("PWA v3.1: ロジック(移植の同一性)", () => {
   it("buildCSV: ラベル/1/0/空の変換", () => {
     const f = boot().window.__flourish;
     const d = f.defaultData();
-    d.entries["2026-08-08"] = { bedtime: 4, wake: 1, sleepFeel: 1, youtube: 0, ashwagandha: false, coffee: true, creatine: true, weight: true, weightVal: "68.5", gym: false, study: true };
+    d.entries["2026-08-08"] = { bedtimeMin: 1512, wakeMin: 390, sleepFeel: 1, youtubeMin: 30, ashwagandha: false, coffee: true, creatine: true, weight: true, weightVal: "68.5", gym: false, study: true };
     const [head, row] = f.buildCSV(d).split("\n");
-    expect(head).toContain("就寝時刻");
-    expect(row).toBe("2026-08-08,以降,〜6:30,普通,<30分,0,1,1,1,68.5,0,1,,,,,,,,,,,,,");
+    expect(head).toContain("就寝時刻(分)");
+    // 分の実値をそのまま出す。1512=25:12(v9 の移行値)、390=6:30、30=30分
+    expect(row).toBe("2026-08-08,1512,390,普通,30,0,1,1,1,68.5,0,1,,,,,,,,,,,,,");
   });
 
   it("週報コピー用テキストに凡例と今週/前週JSONが含まれる", () => {
@@ -447,7 +460,7 @@ describe("PWA v3.1: 取り込んだJSONを信用しない", () => {
   it("lastBackup を持たない v2 データも読める", () => {
     const f = boot().window.__flourish;
     const m = f.migrate({ version: 2, entries: { "2026-08-01": { gym: true } } });
-    expect(m.version).toBe(8);
+    expect(m.version).toBe(9);
     expect(m.lastBackup).toBe(null);
     expect(m.entries["2026-08-01"].gym).toBe(true);
   });
@@ -582,20 +595,22 @@ describe("PWA v3.1: バックアップの記録", () => {
 });
 
 describe("PWA v3.1: 起床時刻(計測のみ)", () => {
-  it("記録タブでタップすると当朝の wake として保存される", () => {
+  it("select で選ぶと当朝の wakeMin として分で保存される", () => {
     const dom = boot();
     const f = dom.window.__flourish;
-    byText(dom, "button.sb", "〜6:30").click();
-    const saved = JSON.parse(dom.window.localStorage.getItem(KEY));
-    expect(saved.entries[f.fmt(new Date())].wake).toBe(1);
-    expect(byText(dom, "button.sb", "〜6:30").getAttribute("aria-pressed")).toBe("true");
+    const s = q(dom, 'select[data-f="wakeMin"]');
+    s.value = "390"; // 6:30
+    s.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
+    expect(JSON.parse(dom.window.localStorage.getItem(KEY)).entries[f.fmt(new Date())].wakeMin).toBe(390);
+    expect(q(dom, 'select[data-f="wakeMin"]').value).toBe("390");
   });
 
-  it("同じボタン2回タップで未入力に戻る", () => {
+  it("空欄を選ぶと未入力に戻る", () => {
     const dom = boot();
-    const btn = () => byText(dom, "button.sb", "〜7:00");
-    btn().click();
-    btn().click();
+    const s = () => q(dom, 'select[data-f="wakeMin"]');
+    const set = (v) => { const e = s(); e.value = v; e.dispatchEvent(new dom.window.Event("change", { bubbles: true })); };
+    set("420");
+    set("");
     expect(Object.keys(JSON.parse(dom.window.localStorage.getItem(KEY)).entries).length).toBe(0);
   });
 
@@ -603,11 +618,11 @@ describe("PWA v3.1: 起床時刻(計測のみ)", () => {
   it("週の目標・達成ラインを持たず、週タブでは計測のみと表示する", () => {
     const f0 = boot().window.__flourish;
     const d = f0.defaultData();
-    d.entries[f0.fmt(new Date())] = { wake: 0 };
+    d.entries[f0.fmt(new Date())] = { wakeMin: 360 };
     const dom = boot(JSON.stringify(d));
     byText(dom, "button.tb", "設定").click();
-    expect(qa(dom, "[data-tgt]").some((el) => el.dataset.tgt === "wake")).toBe(false);
-    expect(q(dom, '[data-th="wake"]')).toBe(null);
+    expect(qa(dom, "[data-tgt]").some((el) => el.dataset.tgt === "wakeMin")).toBe(false);
+    expect(q(dom, '[data-th="wakeMin"]')).toBe(null);
     byText(dom, "button.tb", "週").click();
     const rows = qa(dom, ".wrow").filter((el) => el.textContent.includes("起床時刻"));
     expect(rows.length).toBe(1);
@@ -618,31 +633,32 @@ describe("PWA v3.1: 起床時刻(計測のみ)", () => {
   it("CSVと週報データに起床時刻が入る", () => {
     const f = boot().window.__flourish;
     const d = f.defaultData();
-    d.entries["2026-08-08"] = { bedtime: 0, wake: 3 };
+    d.entries["2026-08-08"] = { bedtimeMin: 1320, wakeMin: 450 };
     const [head, row] = f.buildCSV(d).split("\n");
-    expect(head).toContain("起床時刻");
-    expect(row).toBe("2026-08-08,〜23:00,〜7:30,,,,,,,,,,,,,,,,,,,,,,");
+    expect(head).toContain("起床時刻(分)");
+    expect(row).toBe("2026-08-08,1320,450,,,,,,,,,,,,,,,,,,,,,,");
     const t = f.buildReviewText(d, "2026-08-08");
-    expect(t).toContain("wake=[〜6:00,〜6:30,〜7:00,〜7:30,以降]");
+    expect(t).toContain("wakeMin");
+    expect(t).toContain("分の実値");
     expect(t).toContain("計測のみ");
-    expect(t).toContain('"wake":');
+    expect(t).toContain('"wakeMin":');
   });
 
   it("wake を持たない旧データも読め、version が上がる", () => {
     const f = boot().window.__flourish;
     const m = f.migrate({ version: 3, entries: { "2026-08-01": { bedtime: 1 } } });
-    expect(m.version).toBe(8);
-    expect(m.enabled.wake).toBe(true);
-    expect(m.entries["2026-08-01"]).toEqual({ bedtime: 1 });
+    expect(m.version).toBe(9);
+    expect(m.enabled.wakeMin).toBe(true);
+    expect(m.entries["2026-08-01"]).toEqual({ bedtimeMin: 1410 });
   });
 
   it("表示トグルを切ると記録タブから消える", () => {
     const dom = boot();
-    expect(q(dom, '[data-f="wake"]')).not.toBe(null);
+    expect(q(dom, '[data-f="wakeMin"]')).not.toBe(null);
     byText(dom, "button.tb", "設定").click();
-    q(dom, '[data-tog="wake"]').click();
+    q(dom, '[data-tog="wakeMin"]').click();
     byText(dom, "button.tb", "記録").click();
-    expect(q(dom, '[data-f="wake"]')).toBe(null);
+    expect(q(dom, '[data-f="wakeMin"]')).toBe(null);
   });
 
   it("推移タブに起床時刻のチャートが出る", () => {
@@ -658,7 +674,7 @@ describe("PWA v3.1: 起床時刻(計測のみ)", () => {
     for (let i = 0; i < 28; i++) {
       const dt = new Date("2026-07-01T00:00");
       dt.setDate(dt.getDate() + i);
-      d.entries[f0.fmt(dt)] = { wake: i % 2 ? 3 : 0, sleepFeel: i % 2 ? 2 : 0 };
+      d.entries[f0.fmt(dt)] = { wakeMin: i % 2 ? 450 : 360, sleepFeel: i % 2 ? 2 : 0 };
     }
     const dom = boot(JSON.stringify(d));
     byText(dom, "button.tb", "週報").click();
@@ -679,7 +695,7 @@ describe("PWA v3.1: 相関ヒント", () => {
       const good = i % 2 === 0;
       d.entries[f.fmt(dt)] = {
         ashwagandha: good, sleepFeel: good ? 0 : 2,
-        bedtime: good ? 0 : 4, wake: good ? 0 : 4,
+        bedtimeMin: good ? 1380 : 1512, wakeMin: good ? 360 : 492,
       };
     }
     return d;
@@ -741,7 +757,7 @@ describe("PWA v3.1: 推移タブの期間切替", () => {
   it("90日表示では点を打たない", () => {
     const f0 = boot().window.__flourish;
     const d = f0.defaultData();
-    for (let i = 0; i < 40; i++) d.entries[dayAgo(f0, i)] = { bedtime: i % 5 };
+    for (let i = 0; i < 40; i++) d.entries[dayAgo(f0, i)] = { bedtimeMin: [1320, 1380, 1440, 1500, 1560][i % 5] };
     const dom = boot(JSON.stringify(d));
     openTrend(dom);
     expect(qa(dom, "svg")[0].querySelectorAll("circle").length).toBeGreaterThan(0);
@@ -758,7 +774,7 @@ describe("PWA v3.1: 睡眠の帯グラフ", () => {
   it("就寝と起床が揃った日ができるまでは案内文を出す", () => {
     const f0 = boot().window.__flourish;
     const d = f0.defaultData();
-    d.entries[dayAgo(f0, 0)] = { bedtime: 2 }; // 就寝だけでは睡眠の長さが決まらない
+    d.entries[dayAgo(f0, 0)] = { bedtimeMin: 1440 }; // 就寝だけでは睡眠の長さが決まらない
     const dom = boot(JSON.stringify(d));
     openTrend(dom);
     expect(q(dom, "#view").textContent).not.toContain("睡眠(28日)");
@@ -769,8 +785,8 @@ describe("PWA v3.1: 睡眠の帯グラフ", () => {
   it("両方揃うと帯が出て、就寝と起床の線が引かれる", () => {
     const f0 = boot().window.__flourish;
     const d = f0.defaultData();
-    d.entries[dayAgo(f0, 0)] = { bedtime: 2, wake: 2 };
-    d.entries[dayAgo(f0, 1)] = { bedtime: 1, wake: 1 };
+    d.entries[dayAgo(f0, 0)] = { bedtimeMin: 1440, wakeMin: 420 };
+    d.entries[dayAgo(f0, 1)] = { bedtimeMin: 1410, wakeMin: 390 };
     const dom = boot(JSON.stringify(d));
     openTrend(dom);
     expect(q(dom, "#view").textContent).toContain("睡眠(28日)");
@@ -784,9 +800,9 @@ describe("PWA v3.1: 睡眠の帯グラフ", () => {
   it("片方が欠けた日で帯を切る", () => {
     const f0 = boot().window.__flourish;
     const d = f0.defaultData();
-    [0, 1].forEach((n) => { d.entries[dayAgo(f0, n)] = { bedtime: 2, wake: 2 }; });
-    d.entries[dayAgo(f0, 2)] = { bedtime: 2 }; // 起床が無いので途切れる
-    [3, 4].forEach((n) => { d.entries[dayAgo(f0, n)] = { bedtime: 2, wake: 2 }; });
+    [0, 1].forEach((n) => { d.entries[dayAgo(f0, n)] = { bedtimeMin: 1440, wakeMin: 420 }; });
+    d.entries[dayAgo(f0, 2)] = { bedtimeMin: 1440 }; // 起床が無いので途切れる
+    [3, 4].forEach((n) => { d.entries[dayAgo(f0, n)] = { bedtimeMin: 1440, wakeMin: 420 }; });
     const dom = boot(JSON.stringify(d));
     openTrend(dom);
     expect(bands(dom)).toBe(2);
@@ -795,7 +811,7 @@ describe("PWA v3.1: 睡眠の帯グラフ", () => {
   it("孤立した1日は線分で示す", () => {
     const f0 = boot().window.__flourish;
     const d = f0.defaultData();
-    d.entries[dayAgo(f0, 3)] = { bedtime: 2, wake: 2 };
+    d.entries[dayAgo(f0, 3)] = { bedtimeMin: 1440, wakeMin: 420 };
     const dom = boot(JSON.stringify(d));
     openTrend(dom);
     expect(bands(dom)).toBe(0); // 幅0の帯は塗っても見えない
@@ -806,8 +822,8 @@ describe("PWA v3.1: 睡眠の帯グラフ", () => {
   it("睡眠時間を「◯時間」と数値で断定しない", () => {
     const f0 = boot().window.__flourish;
     const d = f0.defaultData();
-    d.entries[dayAgo(f0, 0)] = { bedtime: 2, wake: 2 };
-    d.entries[dayAgo(f0, 1)] = { bedtime: 2, wake: 2 };
+    d.entries[dayAgo(f0, 0)] = { bedtimeMin: 1440, wakeMin: 420 };
+    d.entries[dayAgo(f0, 1)] = { bedtimeMin: 1440, wakeMin: 420 };
     const dom = boot(JSON.stringify(d));
     openTrend(dom);
     const view = q(dom, "#view").textContent;
@@ -1088,9 +1104,9 @@ describe("PWA v3.1: v5 スキーマ", () => {
       th: { bedtime: 0 },
       entries: { "2026-08-01": { gym: true } },
     });
-    expect(m.version).toBe(8);
+    expect(m.version).toBe(9);
     expect(m.targets.gym).toBe(4);
-    expect(m.th.bedtime).toBe(0);
+    expect(m.th.bedtimeMin).toBe(1380);
     // 達成ラインを設定していない旧データは、シフトの対象ではなく新既定で埋まる
     expect(m.th.steps).toBe(2);
     ["sauna", "steps", "sober", "meal"].forEach((id) => {
@@ -1191,7 +1207,7 @@ describe("PWA v3.1: 整腸剤・サプリ", () => {
   it("v5 データを読んでも既存の設定を保ち、サプリは既定値で埋まる", () => {
     const f = boot().window.__flourish;
     const m = f.migrate({ version: 5, targets: { meal: 3 }, entries: { "2026-08-01": { mealB: true } } });
-    expect(m.version).toBe(8);
+    expect(m.version).toBe(9);
     expect(m.targets.meal).toBe(3);
     expect(m.targets.supp).toBe(6);
     expect(m.enabled.supp).toBe(true);
@@ -1385,7 +1401,7 @@ describe("PWA v3.1: PCへの同期(任意)", () => {
     byText(dom, "button.tb", "記録").click();
     byText(dom, "button.sb", "✓ した").click();
     await advance(dom, 2000);
-    byText(dom, "button.sb", "〜23:00").click(); // 待ち時間が延びる
+    pickMin(dom, "bedtimeMin", "1380"); // 2回目の保存で待ち時間が延びる
     await advance(dom, 2000);
     expect(calls.length).toBe(0);
     await advance(dom, 2000);
@@ -1398,7 +1414,7 @@ describe("PWA v3.1: PCへの同期(任意)", () => {
     configure(dom, URL_OK, "t".repeat(32));
     byText(dom, "button.tb", "記録").click();
     byText(dom, "button.sb", "✓ した").click();
-    byText(dom, "button.sb", "〜23:00").click();
+    pickMin(dom, "bedtimeMin", "1380");
     await tick();
     expect(calls.length).toBe(0); // 待ち時間の前には飛ばない
   });
@@ -1539,7 +1555,7 @@ describe("PWA v3.1: v7 スキーマ(歩数の4段階化)", () => {
         "2026-08-03": { steps: 2 },
       },
     });
-    expect(m.version).toBe(8);
+    expect(m.version).toBe(9);
     expect(m.th.steps).toBe(2);
     expect(m.entries["2026-08-01"].steps).toBe(1);
     expect(m.entries["2026-08-02"]).toEqual({ steps: 2, gym: true });
@@ -1944,7 +1960,8 @@ describe("PWA v3.1: 項目の結線ガード(CORE 起点)", () => {
       // 1日3回ぶんの項目は parts が入力欄とCSV列を持ち、畳んだ id 自体は持たない
       (c.parts || [{ id: c.id, label: c.label }]).forEach((p) => {
         expect(onLog).toContain(p.id);
-        expect(head).toContain(p.label);
+        // 列名は単位を添えることがある(「就寝時刻(分)」)ので部分一致で見る
+        expect(head.some((c) => c.includes(p.label))).toBe(true);
       });
     });
   });
@@ -1956,7 +1973,7 @@ describe("PWA v3.1: 項目の結線ガード(CORE 起点)", () => {
     const d = f.defaultData();
     // 埋める項目は enabled から導く。CORE や MOOD を手で並べると、
     // 次に計測のみの項目を足したときに「CSV列だけ忘れた」が素通りする
-    const NUM = { bedtime: 1, wake: 1, sleepFeel: 1, youtube: 1, steps: 1, moodM: 0, moodN: 0, moodE: 0 };
+    const NUM = { bedtimeMin: 1440, wakeMin: 420, sleepFeel: 1, youtubeMin: 60, steps: 1, moodM: 0, moodN: 0, moodE: 0 };
     const groups = f.PERDAY.concat([f.MOOD]);
     const e = { weightVal: "68.5" };
     Object.keys(d.enabled).forEach((id) => {
@@ -1990,7 +2007,7 @@ describe("PWA v3.1: 項目の結線ガード(CORE 起点)", () => {
   // 項目を1つだけ埋めた行を作り、CSVのどこかに値が出ることで「列がある」ことを確かめる
   it("記録できる項目はすべてCSVに1列以上を持つ", () => {
     const f = boot().window.__flourish;
-    const NUM = { bedtime: 1, wake: 1, sleepFeel: 1, youtube: 1, steps: 1, moodM: 0, moodN: 0, moodE: 0 };
+    const NUM = { bedtimeMin: 1440, wakeMin: 420, sleepFeel: 1, youtubeMin: 60, steps: 1, moodM: 0, moodN: 0, moodE: 0 };
     const groups = f.PERDAY.concat([f.MOOD]);
     Object.keys(f.defaultData().enabled).forEach((id) => {
       const d = f.defaultData();
@@ -2007,7 +2024,7 @@ describe("PWA v3.1: 項目の結線ガード(CORE 起点)", () => {
   // 1項目ずつ埋めて、それぞれが自分だけの列に出ることを確かめる
   it("記録できる項目のCSV列が互いに重ならない", () => {
     const f = boot().window.__flourish;
-    const NUM = { bedtime: 1, wake: 1, sleepFeel: 1, youtube: 1, steps: 1, moodM: 0, moodN: 0, moodE: 0 };
+    const NUM = { bedtimeMin: 1440, wakeMin: 420, sleepFeel: 1, youtubeMin: 60, steps: 1, moodM: 0, moodN: 0, moodE: 0 };
     const groups = f.PERDAY.concat([f.MOOD]);
     const ids = [];
     Object.keys(f.defaultData().enabled).forEach((id) => {
@@ -2143,10 +2160,119 @@ describe("PWA v3.1: 月間ビュー", () => {
     const dom = open();
     const opts = () => [...q(dom, "[data-mon]").options].map((o) => o.value);
     expect(opts()).toContain("gym");
-    ["mood", "wake", "sleepFeel"].forEach((id) => expect(opts()).not.toContain(id));
+    ["mood", "wakeMin", "sleepFeel"].forEach((id) => expect(opts()).not.toContain(id));
     byText(dom, "button.tb", "設定").click();
     q(dom, '[data-tog="gym"]').click();
     byText(dom, "button.tb", "推移").click();
     expect(opts()).not.toContain("gym");
+  });
+});
+
+describe("PWA v3.1: v9 スキーマ(就寝・起床・YouTube の分値化)", () => {
+  // 変換表はバケットの上端。開区間だけ旧チャートの慣行値(25.2h / 8.2h / 2.5h)に対応する
+  it("旧インデックスを分へ読み替え、旧キーを残さない", () => {
+    const f = boot().window.__flourish;
+    const m = f.migrate({
+      version: 8,
+      th: { bedtime: 1, youtube: 2 },
+      targets: { bedtime: 4, youtube: 3 },
+      enabled: { bedtime: false, wake: true, youtube: true },
+      entries: { "2026-08-01": { bedtime: 0, wake: 4, youtube: 3, gym: true } },
+    });
+    expect(m.version).toBe(9);
+    expect(m.entries["2026-08-01"]).toEqual({ bedtimeMin: 1380, wakeMin: 492, youtubeMin: 150, gym: true });
+    expect(m.th.bedtimeMin).toBe(1410);
+    expect(m.th.youtubeMin).toBe(120);
+    expect(m.th.bedtime).toBe(undefined);
+    expect(m.targets.bedtimeMin).toBe(4); // 週の回数なので値は変換しない
+    expect(m.targets.bedtime).toBe(undefined);
+    expect(m.enabled.bedtimeMin).toBe(false); // 非表示の設定は持ち越す
+    expect(m.enabled.wakeMin).toBe(true);
+    expect(m.enabled.wake).toBe(undefined);
+  });
+
+  // 読み替えの目的は「過去の達成/未達が1つも変わらない」こと。旧仕様の式を右辺に置いて突き合わせる
+  it("読み替えても過去の達成判定が1つも変わらない", () => {
+    const f = boot().window.__flourish;
+    [0, 1, 2, 3].forEach((oldTh) => {
+      const old = { version: 8, th: { bedtime: oldTh, youtube: Math.min(oldTh, 2) }, entries: {} };
+      [0, 1, 2, 3, 4].forEach((v) => { old.entries["2026-08-0" + (v + 1)] = { bedtime: v, youtube: Math.min(v, 3) }; });
+      const m = f.migrate(old);
+      [0, 1, 2, 3, 4].forEach((v) => {
+        const e = m.entries["2026-08-0" + (v + 1)];
+        expect(f.achieved(m, e, "bedtimeMin")).toBe(v <= oldTh);
+        expect(f.achieved(m, e, "youtubeMin")).toBe(Math.min(v, 3) <= Math.min(oldTh, 2));
+      });
+    });
+  });
+
+  it("二度通しても再変換せず、入力オブジェクトも書き換えない", () => {
+    const f = boot().window.__flourish;
+    const src = { version: 8, entries: { "2026-08-01": { bedtime: 2 } } };
+    const once = f.migrate(src);
+    expect(src.entries["2026-08-01"]).toEqual({ bedtime: 2 }); // 入力は無傷
+    expect(f.migrate(once).entries["2026-08-01"]).toEqual({ bedtimeMin: 1440 });
+  });
+
+  // 手で繋いだJSONは旧キーと新キーが両方あることがある。新しい方を正とする
+  it("旧キーと新キーが両方あれば新キーを残す", () => {
+    const f = boot().window.__flourish;
+    const m = f.migrate({ version: 8, entries: { "2026-08-01": { bedtime: 0, bedtimeMin: 1425 } } });
+    expect(m.entries["2026-08-01"]).toEqual({ bedtimeMin: 1425 });
+  });
+
+  it("汚れた旧値は変換も削除もせず素通しする", () => {
+    const f = boot().window.__flourish;
+    const m = f.migrate({ version: 8, entries: { a: { bedtime: "2" }, b: { wake: 9 }, c: null } });
+    expect(m.entries.a).toEqual({ bedtime: "2" });
+    expect(m.entries.b).toEqual({ wake: 9 });
+    expect(m.entries.c).toBe(null);
+  });
+
+  // 実値保存なので、選択肢を増やしても過去の記録の意味は動かない = migrate が要らない
+  it("記録タブの select は空欄が既定で、選択肢はすべて分の数値", () => {
+    const dom = boot();
+    const f = dom.window.__flourish;
+    [["bedtimeMin", f.BEDTIME_MIN], ["wakeMin", f.WAKE_MIN], ["youtubeMin", f.YT_MIN]].forEach(([id, opts]) => {
+      const s = q(dom, `select[data-f="${id}"]`);
+      expect(s).not.toBe(null);
+      expect(s.value).toBe(""); // 既定値があると未入力と区別できず、推奨値にも見える
+      const vals = [...s.options].map((o) => o.value);
+      expect(vals[0]).toBe("");
+      expect(vals.slice(1)).toEqual(opts.map(String));
+    });
+  });
+
+  // 移行で入った 1512(25:12) / 492(8:12) は15分格子に乗らない。option が無いと
+  // 値があるのに無選択で描かれ、別の値を選んだ瞬間に黙って消える
+  it("選択肢に無い保存値にも option を足して編集できる", () => {
+    const f0 = boot().window.__flourish;
+    const d = f0.defaultData();
+    d.entries[f0.fmt(new Date())] = { bedtimeMin: 1512 };
+    const dom = boot(JSON.stringify(d));
+    const s = q(dom, 'select[data-f="bedtimeMin"]');
+    expect(s.value).toBe("1512");
+    expect([...s.options].map((o) => o.text)).toContain("25:12");
+  });
+
+  it("週報は分の実値を昇順で渡し、日付との対応は渡さない", () => {
+    const f = boot().window.__flourish;
+    const d = f.defaultData();
+    const ws = f.weekStart(new Date("2026-08-05T00:00"));
+    const day = (n) => f.fmt(new Date(ws.getFullYear(), ws.getMonth(), ws.getDate() + n));
+    d.entries[day(0)] = { bedtimeMin: 1500 };
+    d.entries[day(1)] = { bedtimeMin: 1380, youtubeMin: 0 };
+    const s = f.weekStats(d, ws, day(6));
+    expect(s.bedtimeMin).toEqual([1380, 1500]);
+    expect(s.youtubeMin).toEqual([0]); // 0分は正当な記録なので落とさない
+    expect(s.wakeMin).toEqual([]);
+  });
+
+  // 入力が15分刻みでも達成ラインは粗いまま。締め上げの無摩擦化を避けるための意図的な決定
+  it("達成ラインの選択肢は v8 までと同じ境界のまま", () => {
+    const dom = boot();
+    byText(dom, "button.tb", "設定").click();
+    expect([...q(dom, '[data-th="bedtimeMin"]').options].map((o) => o.value)).toEqual(["1380", "1410", "1440", "1470"]);
+    expect([...q(dom, '[data-th="youtubeMin"]').options].map((o) => o.value)).toEqual(["30", "60", "120"]);
   });
 });

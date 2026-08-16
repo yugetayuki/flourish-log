@@ -58,11 +58,13 @@ const saved = await page.evaluate(() => localStorage.getItem("flourish-log-v2"))
 check("1タップで localStorage に保存される", !!saved && saved.includes("ashwagandha"));
 check("「✓ 保存済み」が出る", (await page.textContent("#saveState")) === "✓ 保存済み");
 
-await page.getByRole("button", { name: "〜6:30", exact: true }).click();
-await page.getByRole("button", { name: "〜23:30", exact: true }).click();
+// 時刻と視聴時間は分の実値を select で選ぶ(v9)。実ブラウザのネイティブピッカー経由で保存されるかを見る
+await page.selectOption('select[data-f="wakeMin"]', "390");
+await page.selectOption('select[data-f="bedtimeMin"]', "1410");
 const wake = await page.evaluate(() => JSON.parse(localStorage.getItem("flourish-log-v2")));
 const wakeDay = wake.entries[Object.keys(wake.entries)[0]];
-check("起床時刻が1タップで保存される", wakeDay.wake === 1, JSON.stringify(wakeDay));
+check("起床時刻が select で分として保存される", wakeDay.wakeMin === 390, JSON.stringify(wakeDay));
+check("就寝時刻も同じ経路で保存される", wakeDay.bedtimeMin === 1410, JSON.stringify(wakeDay));
 
 for (const tab of ["週", "推移", "週報", "設定"]) {
   await page.getByRole("button", { name: tab, exact: true }).click();
