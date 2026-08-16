@@ -135,7 +135,7 @@ svg{display:block}
 <body>
 <div id="wrap">
   <header>
-    <div class="title"><h1>Aubade</h1><span class="eyebrow mono">DAWN&nbsp;LOG&nbsp;·&nbsp;v4.12</span></div>
+    <div class="title"><h1>Aubade</h1><span class="eyebrow mono">DAWN&nbsp;LOG&nbsp;·&nbsp;v4.13</span></div>
     <span id="saveState"></span>
   </header>
   <div id="banner"></div>
@@ -1545,7 +1545,7 @@ function viewSettings(){
   h += '</div></div>';
 
   h += '<p class="foot">データはこの端末のブラウザ(このアプリ)内にのみ保存されます。バックアップはJSONコピーで。'
-    + 'このアプリの役割は計測と週次フィードバックまで — 行動を変えるのは環境設計の仕事です。 v4.12</p>';
+    + 'このアプリの役割は計測と週次フィードバックまで — 行動を変えるのは環境設計の仕事です。 v4.13</p>';
   return h;
 }
 
@@ -1673,7 +1673,9 @@ document.addEventListener("click", function(ev){
     // 止め忘れは「実際より長い」方向にしか壊れない。黙って足すと週の合計が一度で狂い、
     // しかも後から見て異常だと気づけない。記録せず、手入力へ回す
     if (mins > TIMER_MAX_MIN) {
-      flash(fmtDur(mins) + " は長すぎるため記録していません", true);
+      // 「長すぎる」は評価語。実際に6時間勉強した日にこれを出すと、記録しないうえに
+      // 行動そのものを否定することになる。出すのは閾値を超えたという事実と、次の手だけ
+      flash(fmtDur(mins) + "（" + fmtDur(TIMER_MAX_MIN) + "超）のため記録していません。記録タブから入力できます", true);
       render(); return;
     }
     if (mins > 0) {
