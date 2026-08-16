@@ -62,11 +62,11 @@ const stubShare = (impl) => (w) => {
   w.navigator.canShare = () => true;
 };
 
-describe("PWA v4.7: 起動と基本描画", () => {
-  it("記録タブが描画され、v4.7表示がある", () => {
+describe("PWA v4.9: 起動と基本描画", () => {
+  it("記録タブが描画され、v4.9表示がある", () => {
     const dom = boot();
     expect(q(dom, "#view").textContent).toContain("就寝時刻");
-    expect(q(dom, ".eyebrow").textContent).toContain("v4.7");
+    expect(q(dom, ".eyebrow").textContent).toContain("v4.9");
   });
 
   it("正常起動では警告バナーを出さない", () => {
@@ -91,7 +91,7 @@ describe("PWA v4.7: 起動と基本描画", () => {
   });
 });
 
-describe("PWA v4.7: 保存と復元", () => {
+describe("PWA v4.9: 保存と復元", () => {
   it("タップ→localStorageに即保存され✓保存済みが出る", () => {
     const dom = boot();
     byText(dom, "button.sb", "✓ した").click(); // 最初の「した」=アシュワガンダ
@@ -126,7 +126,7 @@ describe("PWA v4.7: 保存と復元", () => {
   });
 });
 
-describe("PWA v4.7: ロジック(移植の同一性)", () => {
+describe("PWA v4.9: ロジック(移植の同一性)", () => {
   it("achieved: 就寝ライン/チェック/未入力", () => {
     const f = boot().window.__flourish;
     const d = f.defaultData();
@@ -164,7 +164,7 @@ describe("PWA v4.7: ロジック(移植の同一性)", () => {
   });
 });
 
-describe("PWA v4.7: 週タブ・週報タブ", () => {
+describe("PWA v4.9: 週タブ・週報タブ", () => {
   it("週タブ: 達成した項目が1/6と表示されドットが出る", () => {
     const f0 = boot().window.__flourish;
     const d = f0.defaultData();
@@ -183,7 +183,7 @@ describe("PWA v4.7: 週タブ・週報タブ", () => {
   });
 });
 
-describe("PWA v4.7: 設定タブ", () => {
+describe("PWA v4.9: 設定タブ", () => {
   it("CSVエクスポート: テキストエリアにdate,ヘッダーが出る", () => {
     const dom = boot();
     byText(dom, "button.tb", "設定").click();
@@ -219,7 +219,7 @@ describe("PWA v4.7: 設定タブ", () => {
   });
 });
 
-describe("PWA v4.7: 壊れた保存データを黙って消さない", () => {
+describe("PWA v4.9: 壊れた保存データを黙って消さない", () => {
   const BROKEN = '{"version":2,"entries":{"2026-08-01":{"gym":true}'; // 末尾が欠けたJSON
 
   it("解析に失敗したら警告バナーを出し、原本を退避キーへ移す", () => {
@@ -262,7 +262,7 @@ describe("PWA v4.7: 壊れた保存データを黙って消さない", () => {
   });
 });
 
-describe("PWA v4.7: コピー結果を偽らない", () => {
+describe("PWA v4.9: コピー結果を偽らない", () => {
   const openExport = (dom) => {
     byText(dom, "button.tb", "設定").click();
     byText(dom, "button.ghost", "CSVをコピー").click();
@@ -308,7 +308,7 @@ describe("PWA v4.7: コピー結果を偽らない", () => {
   });
 });
 
-describe("PWA v4.7: CSVの列ずれ", () => {
+describe("PWA v4.9: CSVの列ずれ", () => {
   it("カンマを含むカスタム項目名でも列数が一致する", () => {
     const f = boot().window.__flourish;
     const d = f.defaultData();
@@ -329,7 +329,7 @@ describe("PWA v4.7: CSVの列ずれ", () => {
   });
 });
 
-describe("PWA v4.7: 配信ポリシー", () => {
+describe("PWA v4.9: 配信ポリシー", () => {
   it("CSPで外部への持ち出し経路を塞いでいる", () => {
     const csp = q(boot(), 'meta[http-equiv="Content-Security-Policy"]');
     expect(csp).not.toBe(null);
@@ -366,7 +366,7 @@ describe("PWA v4.7: 配信ポリシー", () => {
   });
 });
 
-describe("PWA v4.7: Service Worker", () => {
+describe("PWA v4.9: Service Worker", () => {
   const sw = readFileSync("sw.js", "utf8");
 
   it("CSPが worker-src 'self' を許可する", () => {
@@ -410,7 +410,7 @@ describe("PWA v4.7: Service Worker", () => {
   });
 });
 
-describe("PWA v4.7: 取り込んだJSONを信用しない", () => {
+describe("PWA v4.9: 取り込んだJSONを信用しない", () => {
   const EVIL = 'c_x" data-action="reset2';
   const importJson = (dom, data) => {
     byText(dom, "button.tb", "設定").click();
@@ -483,7 +483,7 @@ describe("PWA v4.7: 取り込んだJSONを信用しない", () => {
   });
 });
 
-describe("PWA v4.7: 日付またぎ", () => {
+describe("PWA v4.9: 日付またぎ", () => {
   const dateT = (dom) => q(dom, ".dateT").textContent;
 
   it("復帰時に日付が変わっていたら、今日を見ていた人を今日へ送る", () => {
@@ -531,7 +531,7 @@ describe("PWA v4.7: 日付またぎ", () => {
   });
 });
 
-describe("PWA v4.7: バックアップの記録", () => {
+describe("PWA v4.9: バックアップの記録", () => {
   const openSettings = (dom) => byText(dom, "button.tb", "設定").click();
   const ago = (f, n) => { const d = new Date(); d.setDate(d.getDate() - n); return f.fmt(d); };
 
@@ -611,7 +611,7 @@ describe("PWA v4.7: バックアップの記録", () => {
   });
 });
 
-describe("PWA v4.7: 起床時刻(計測のみ)", () => {
+describe("PWA v4.9: 起床時刻(計測のみ)", () => {
   it("select で選ぶと当朝の wakeMin として分で保存される", () => {
     const dom = boot();
     const f = dom.window.__flourish;
@@ -701,7 +701,7 @@ describe("PWA v4.7: 起床時刻(計測のみ)", () => {
   });
 });
 
-describe("PWA v4.7: 相関ヒント", () => {
+describe("PWA v4.9: 相関ヒント", () => {
   // 同じ entry の中で対にするので、時点がずれない組み合わせしか作れない
   // (前夜のアシュワガンダ × 当朝の眠れた感 は成立、当朝のコーヒー × その夜の就寝 は成立しない)
   const seed = (f) => {
@@ -744,7 +744,7 @@ describe("PWA v4.7: 相関ヒント", () => {
   });
 });
 
-describe("PWA v4.7: 推移タブの期間切替", () => {
+describe("PWA v4.9: 推移タブの期間切替", () => {
   const openTrend = (dom) => byText(dom, "button.tb", "推移").click();
   const dayAgo = (f, n) => { const d = new Date(); d.setDate(d.getDate() - n); return f.fmt(d); };
 
@@ -783,7 +783,7 @@ describe("PWA v4.7: 推移タブの期間切替", () => {
   });
 });
 
-describe("PWA v4.7: 睡眠の帯グラフ", () => {
+describe("PWA v4.9: 睡眠の帯グラフ", () => {
   const openTrend = (dom) => byText(dom, "button.tb", "推移").click();
   const dayAgo = (f, n) => { const d = new Date(); d.setDate(d.getDate() - n); return f.fmt(d); };
   const bands = (dom) => qa(dom, "#view path[fill-opacity]").length;
@@ -850,7 +850,7 @@ describe("PWA v4.7: 睡眠の帯グラフ", () => {
   });
 });
 
-describe("PWA v4.7: 体重の自由入力", () => {
+describe("PWA v4.9: 体重の自由入力", () => {
   const enterWeight = (dom, text) => {
     q(dom, '[data-f="weight"][data-v="t"]').click();
     const wv = q(dom, "#wv");
@@ -899,7 +899,7 @@ describe("PWA v4.7: 体重の自由入力", () => {
   });
 });
 
-describe("PWA v4.7: 勉強を分の実値へ移す(study → studyMin)", () => {
+describe("PWA v4.9: 勉強を分の実値へ移す(study → studyMin)", () => {
   it("select で選ぶと studyMin として分で保存される", () => {
     const dom = boot();
     const f = dom.window.__flourish;
@@ -981,7 +981,149 @@ describe("PWA v4.7: 勉強を分の実値へ移す(study → studyMin)", () => {
   });
 });
 
-describe("PWA v4.7: ひとこと(その日の出来事)", () => {
+describe("PWA v4.9: 勉強タイマー", () => {
+  const TKEY = "flourish-log-v2-timer";
+  // タイマーは独立タブ。記録タブからは触れない
+  const openTimer = (dom) => byText(dom, "button.tb", "タイマー").click();
+  const startTimer = (dom) => { openTimer(dom); q(dom, '[data-action="timerStart"]').click(); };
+  const stopTimer = (dom) => q(dom, '[data-action="timerStop"]').click();
+  // タイマーの開始も、1分未満・上限超えの停止も本体データを書かないので KEY 自体が無いことがある
+  const entriesOf = (dom) => {
+    const raw = dom.window.localStorage.getItem(KEY);
+    return raw ? JSON.parse(raw).entries : {};
+  };
+
+  // 朝の入力(20秒)と勉強中の計測は使う時間帯も動線も違う。同じ画面に混ぜない(設計制約3)
+  it("記録タブにはタイマーが一切出ない", () => {
+    const dom = boot();
+    expect(q(dom, '[data-action="timerStart"]')).toBe(null);
+    expect(q(dom, '[data-action="timerStop"]')).toBe(null);
+    expect(byText(dom, "button.tb", "タイマー")).not.toBe(null);
+  });
+
+  it("走行中でも記録タブには出ない", () => {
+    const dom = boot(null, withClock("2026-08-17T20:00"));
+    startTimer(dom);
+    byText(dom, "button.tb", "記録").click();
+    expect(q(dom, '[data-action="timerStop"]')).toBe(null);
+    expect(q(dom, "#view").textContent).not.toContain("停止して記録");
+  });
+
+  it("タイマータブに今日ぶんの累計と記録先の日付が出る", () => {
+    const dom = boot(null, withClock("2026-08-17T20:00"));
+    startTimer(dom);
+    dom.window.__advanceTo("2026-08-17T20:30");
+    stopTimer(dom);
+    const v = q(dom, "#view").textContent;
+    expect(v).toContain("8/18");   // 記録先(翌日ぶん)
+    expect(v).toContain("30分");
+  });
+
+  // 経過を数えるのではなく開始時刻を持つ。iOS の PWA はバックグラウンドで動けないので、
+  // setInterval で数えると画面を消した瞬間に止まり、実際より短い時間が記録される
+  it("開始時刻だけを別キーに保存する", () => {
+    const dom = boot(null, withClock("2026-08-17T20:00"));
+    startTimer(dom);
+    const t = JSON.parse(dom.window.localStorage.getItem(TKEY));
+    expect(t.startedAt).toBe(Date.parse("2026-08-17T20:00"));
+    expect(t.day).toBe("2026-08-17");
+    // 本体データには混ぜない。開始だけでは本体キーを作りさえしない
+    // (バックアップJSON・週報・台帳のどれにも走行中の状態を出さないため)
+    expect(dom.window.localStorage.getItem(KEY)).toBe(null);
+  });
+
+  // 画面を消している間も時間は進む。復帰時に「今 − 開始」で出せることを縛る
+  it("アプリを閉じて開き直しても経過が続く", () => {
+    const dom = boot(null, withClock("2026-08-17T20:00"));
+    startTimer(dom);
+    const saved = dom.window.localStorage.getItem(TKEY);
+    const back = boot(null, (w) => {
+      withClock("2026-08-17T20:45")(w);
+      w.localStorage.setItem(TKEY, saved);
+    });
+    openTimer(back);
+    expect(q(back, '[data-action="timerStop"]')).not.toBe(null);
+    const card = qa(back, ".card").find((el) => el.textContent.includes("勉強タイマー"));
+    expect(card.textContent).toContain("45分");
+  });
+
+  // studyMin は前日を指すので、今日の勉強は明日ぶんのエントリに入る
+  it("停止すると開始した日の翌日ぶんに記録される", () => {
+    const dom = boot(null, withClock("2026-08-17T20:00"));
+    startTimer(dom);
+    dom.window.__advanceTo("2026-08-17T21:30");
+    stopTimer(dom);
+    expect(entriesOf(dom)["2026-08-18"].studyMin).toBe(90);
+    expect(dom.window.localStorage.getItem(TKEY)).toBe(null);
+  });
+
+  it("複数回まわすと合算される", () => {
+    const dom = boot(null, withClock("2026-08-17T09:00"));
+    startTimer(dom);
+    dom.window.__advanceTo("2026-08-17T09:30");
+    stopTimer(dom);
+    startTimer(dom);
+    dom.window.__advanceTo("2026-08-17T10:15");
+    stopTimer(dom);
+    expect(entriesOf(dom)["2026-08-18"].studyMin).toBe(75);
+  });
+
+  // 日をまたいで止めても、始めた日の勉強として数える(記録先は開始時点で決まる)
+  it("日をまたいで停止しても開始した日ぶんに入る", () => {
+    const dom = boot(null, withClock("2026-08-17T23:40"));
+    startTimer(dom);
+    dom.window.__advanceTo("2026-08-18T00:20");
+    stopTimer(dom);
+    expect(entriesOf(dom)["2026-08-18"].studyMin).toBe(40);
+    expect(entriesOf(dom)["2026-08-19"]).toBe(undefined);
+  });
+
+  // 止め忘れは「実際より長い」方向にしか壊れない。黙って足すと週の合計が一度で狂う
+  it("止め忘れ(上限超え)は記録せず、理由を画面に出す", () => {
+    const dom = boot(null, withClock("2026-08-17T09:00"));
+    startTimer(dom);
+    dom.window.__advanceTo("2026-08-18T02:00");   // 17時間
+    stopTimer(dom);
+    expect(entriesOf(dom)["2026-08-18"]).toBe(undefined);
+    expect(q(dom, "#saveState").textContent).toContain("長すぎる");
+    expect(dom.window.localStorage.getItem(TKEY)).toBe(null); // 止まってはいる
+  });
+
+  it("1分未満は記録しない", () => {
+    const dom = boot(null, withClock("2026-08-17T09:00"));
+    startTimer(dom);
+    dom.window.__advanceTo("2026-08-17T09:00:20");
+    stopTimer(dom);
+    expect(Object.keys(entriesOf(dom)).length).toBe(0);
+  });
+
+  // 手動入力とタイマーは同じ studyMin を指す。select で選び直せば上書きできる
+  it("手動の select で上書きできる", () => {
+    const dom = boot(null, withClock("2026-08-17T20:00"));
+    startTimer(dom);
+    dom.window.__advanceTo("2026-08-17T20:47");
+    stopTimer(dom);
+    expect(entriesOf(dom)["2026-08-18"].studyMin).toBe(47);
+    // 47 は15分格子の外だが、minSelect が option を足すので選択状態として出る
+    byText(dom, "button.tb", "記録").click();
+    byText(dom, "button.navbtn", "›").click(); // 明日ぶんへ
+    const s = q(dom, 'select[data-f="studyMin"]');
+    expect(s.value).toBe("47");
+    s.value = "60";
+    s.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
+    expect(entriesOf(dom)["2026-08-18"].studyMin).toBe(60);
+  });
+
+  it("壊れたタイマー状態は無視して起動する", () => {
+    const dom = boot(null, (w) => { w.localStorage.setItem(TKEY, "{壊れている"); });
+    expect(dom.window.__flourish.getTimer()).toBe(null);
+    openTimer(dom);
+    expect(q(dom, '[data-action="timerStop"]')).toBe(null);
+    expect(q(dom, '[data-action="timerStart"]')).not.toBe(null);
+  });
+});
+
+describe("PWA v4.9: ひとこと(その日の出来事)", () => {
   // 設計制約3は「朝の入力は20秒以内」。既定で自由入力欄が出ていると、朝の動線に
   // タップ以外の作業が増える。閉じている限り textarea が存在しないことを縛る
   it("既定では textarea が無く、朝の動線に現れない", () => {
@@ -1066,7 +1208,7 @@ describe("PWA v4.7: ひとこと(その日の出来事)", () => {
   });
 });
 
-describe("PWA v4.7: 誰と過ごしたか(計測のみ)", () => {
+describe("PWA v4.9: 誰と過ごしたか(計測のみ)", () => {
   it("記録タブの「昨日」カードにあり、選ぶとインデックスで保存される", () => {
     const dom = boot();
     const f = dom.window.__flourish;
@@ -1137,7 +1279,7 @@ describe("PWA v4.7: 誰と過ごしたか(計測のみ)", () => {
   });
 });
 
-describe("PWA v4.7: 朝コーヒー", () => {
+describe("PWA v4.9: 朝コーヒー", () => {
   // カスタム項目は「昨日」カードに入る仕様なので、当朝の行動である朝コーヒーは CORE 側に置く
   it("記録タブの「今朝」カードにあり、✓ したで保存される", () => {
     const dom = boot();
@@ -1190,7 +1332,7 @@ describe("PWA v4.7: 朝コーヒー", () => {
   });
 });
 
-describe("PWA v4.7: 週タブの前週併記", () => {
+describe("PWA v4.9: 週タブの前週併記", () => {
   const prevWeekDay = (f, n) => {
     const ws = f.weekStart(new Date());
     const d = new Date(ws);
@@ -1216,7 +1358,7 @@ describe("PWA v4.7: 週タブの前週併記", () => {
   });
 });
 
-describe("PWA v4.7: サウナ・歩数・休肝日", () => {
+describe("PWA v4.9: サウナ・歩数・休肝日", () => {
   const today = (f) => f.fmt(new Date());
 
   it("3項目とも「昨日」カードにあり、1タップで保存される", () => {
@@ -1302,7 +1444,7 @@ describe("PWA v4.7: サウナ・歩数・休肝日", () => {
   });
 });
 
-describe("PWA v4.7: 食事の節制", () => {
+describe("PWA v4.9: 食事の節制", () => {
   const today = (f) => f.fmt(new Date());
 
   // 朝には埋まらない項目なので、他のカードから分けて当日を指すカードに置く
@@ -1350,7 +1492,7 @@ describe("PWA v4.7: 食事の節制", () => {
   });
 });
 
-describe("PWA v4.7: v5 スキーマ", () => {
+describe("PWA v4.9: v5 スキーマ", () => {
   it("v5 データを読んでも既存の設定を保ち、新項目は既定値で埋まる", () => {
     const f = boot().window.__flourish;
     const m = f.migrate({
@@ -1399,7 +1541,7 @@ describe("PWA v4.7: v5 スキーマ", () => {
   });
 });
 
-describe("PWA v4.7: 整腸剤・サプリ", () => {
+describe("PWA v4.9: 整腸剤・サプリ", () => {
   const today = (f) => f.fmt(new Date());
 
   it("「今日のサプリ」カードに朝昼晩があり、飲むたびに1タップで保存される", () => {
@@ -1480,7 +1622,7 @@ describe("PWA v4.7: 整腸剤・サプリ", () => {
   });
 });
 
-describe("PWA v4.7: PCへの同期(任意)", () => {
+describe("PWA v4.9: PCへの同期(任意)", () => {
   const SYNC_KEY = "flourish-log-v2-sync";
   const URL_OK = "https://pc.example-tailnet.ts.net/aubade";
   // fetch は JSDOM に無い。呼ばれた内容を記録し、応答を差し替えられるようにする
@@ -1704,7 +1846,7 @@ describe("PWA v4.7: PCへの同期(任意)", () => {
   });
 });
 
-describe("PWA v4.7: 同期の取り扱いを壊さない", () => {
+describe("PWA v4.9: 同期の取り扱いを壊さない", () => {
   const SYNC_KEY = "flourish-log-v2-sync";
   const URL_OK = "https://pc.example-tailnet.ts.net/aubade";
   const stubFetch = (dom, impl) => {
@@ -1797,7 +1939,7 @@ describe("PWA v4.7: 同期の取り扱いを壊さない", () => {
   });
 });
 
-describe("PWA v4.7: 歩数の移行(v7 の4段階化 → v16 の実値化)", () => {
+describe("PWA v4.9: 歩数の移行(v7 の4段階化 → v16 の実値化)", () => {
   // v6 以前のデータは2段の移行を通る: v7 でインデックスを +1 し、v16 で実値へ移す。
   // 合成後の姿を見ないと、片方が壊れてももう片方が吸収して気づけない
   it("旧インデックスが2段の移行を通って実値になる", () => {
@@ -1882,7 +2024,7 @@ describe("PWA v4.7: 歩数の移行(v7 の4段階化 → v16 の実値化)", () 
   });
 });
 
-describe("PWA v4.7: タンパク質", () => {
+describe("PWA v4.9: タンパク質", () => {
   const today = (f) => f.fmt(new Date());
 
   // 前日を指す項目なので「昨日」カードに置く。「今朝」に置くと指す時点が変わる
@@ -1954,7 +2096,7 @@ describe("PWA v4.7: タンパク質", () => {
   });
 });
 
-describe("PWA v4.7: 今の気分", () => {
+describe("PWA v4.9: 今の気分", () => {
   const today = (f) => f.fmt(new Date());
 
   // PERDAY と同じくその場で1タップするので、指す時点は記録した朝ではなく当日
@@ -2145,7 +2287,7 @@ describe("PWA v4.7: 今の気分", () => {
 });
 
 // 手で足す検査は必ず忘れる。CORE を起点にすれば、次に項目を足したときも自動で検査対象に入る
-describe("PWA v4.7: 項目の結線ガード(CORE 起点)", () => {
+describe("PWA v4.9: 項目の結線ガード(CORE 起点)", () => {
   it("CORE の全項目が記録タブ・CSV列・設定タブに結線されている", () => {
     const dom = boot();
     const f = dom.window.__flourish;
@@ -2301,7 +2443,7 @@ describe("PWA v4.7: 項目の結線ガード(CORE 起点)", () => {
   });
 });
 
-describe("PWA v4.7: 月間ビュー", () => {
+describe("PWA v4.9: 月間ビュー", () => {
   const AUG = "2026-08-16T09:00"; // 2026-08-01 は土曜。月曜起点なので先頭に空きが5つ
   const seed = (entries) => {
     const d = boot().window.__flourish.defaultData();
@@ -2374,7 +2516,7 @@ describe("PWA v4.7: 月間ビュー", () => {
   });
 });
 
-describe("PWA v4.7: v9 スキーマ(就寝・起床・YouTube の分値化)", () => {
+describe("PWA v4.9: v9 スキーマ(就寝・起床・YouTube の分値化)", () => {
   // 変換表はバケットの上端。開区間だけ旧チャートの慣行値(25.2h / 8.2h / 2.5h)に対応する
   it("旧インデックスを分へ読み替え、旧キーを残さない", () => {
     const f = boot().window.__flourish;
@@ -2487,7 +2629,7 @@ describe("PWA v4.7: v9 スキーマ(就寝・起床・YouTube の分値化)", ()
   });
 });
 
-describe("PWA v4.7: お風呂・肌ケア / マウスケア", () => {
+describe("PWA v4.9: お風呂・肌ケア / マウスケア", () => {
   const today = (f) => f.fmt(new Date());
   const ITEMS = [
     { id: "bath", label: "お風呂・肌ケア" },
@@ -2577,7 +2719,7 @@ describe("PWA v4.7: お風呂・肌ケア / マウスケア", () => {
   });
 });
 
-describe("PWA v4.7: 明日ぶんの先取り入力", () => {
+describe("PWA v4.9: 明日ぶんの先取り入力", () => {
   const AUG = "2026-08-16T21:00"; // 夜。翌日は 2026-08-17
   const openLog = () => boot(undefined, withClock(AUG));
   const nav = (dom, dn) => q(dom, `[data-dn="${dn}"]`);
@@ -2634,7 +2776,7 @@ describe("PWA v4.7: 明日ぶんの先取り入力", () => {
   });
 });
 
-describe("PWA v4.7: 水分(お試し)", () => {
+describe("PWA v4.9: 水分(お試し)", () => {
   // 実値(ml)で保存する。刻みを変えても過去の記録の意味は動かないので migrate は要らない
   it("500ml刻みの select で、値は ml の実値として保存される", () => {
     const dom = boot();

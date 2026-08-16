@@ -135,7 +135,7 @@ svg{display:block}
 <body>
 <div id="wrap">
   <header>
-    <div class="title"><h1>Aubade</h1><span class="eyebrow mono">DAWN&nbsp;LOG&nbsp;·&nbsp;v4.7</span></div>
+    <div class="title"><h1>Aubade</h1><span class="eyebrow mono">DAWN&nbsp;LOG&nbsp;·&nbsp;v4.9</span></div>
     <span id="saveState"></span>
   </header>
   <div id="banner"></div>
@@ -714,6 +714,51 @@ function saveSync(){
   try { localStorage.setItem(SYNC_KEY, JSON.stringify(syncCfg)); }
   catch(e) { console.error("[flourish] 同期設定を保存できませんでした", e); }
 }
+
+/* ===== 勉強タイマー =====
+ *
+ * **経過時間を数えない。開始時刻だけを持ち、止めるときに「今 − 開始」で出す。**
+ * iOS のホーム画面PWAはバックグラウンドで動けないので、setInterval で数えると
+ * 画面を消した瞬間に止まり、実際より短い時間が記録される(勉強中は普通、画面を消す)。
+ *
+ * 本体データと別キーに置くのは同期設定と同じ理由。走っている最中の状態は記録ではないので、
+ * バックアップJSON・週報・台帳のどれにも混ぜたくない。migrate の対象外でもある。
+ *
+ * 記録先は「開始した日の翌日」。studyMin は前日を指すフィールドなので、
+ * 今日の勉強は明日ぶんのエントリに入る(先取り入力が明日までなのと同じ向き)。
+ * 日付は開始時点で決める。日をまたいで止めても、始めた日の勉強として数える。
+ */
+var TIMER_KEY = KEY + "-timer";
+// 止め忘れの上限。これを超えた経過は記録せず、手入力に回す。
+// 黙って巨大な値を書き込むと、週の合計が一度で壊れ、しかも原因が分からなくなる
+var TIMER_MAX_MIN = 360;
+var timerState = loadTimer();
+
+function loadTimer(){
+  try {
+    var t = localStorage.getItem(TIMER_KEY);
+    if (!t) return null;
+    var o = JSON.parse(t);
+    if (!o || typeof o.startedAt !== "number" || !isFinite(o.startedAt)) return null;
+    if (typeof o.day !== "string") return null;
+    return {startedAt: o.startedAt, day: o.day};
+  } catch(e) {
+    console.error("[flourish] タイマーの状態を読めませんでした", e);
+    return null;
+  }
+}
+function persistTimer(){
+  try {
+    if (timerState) localStorage.setItem(TIMER_KEY, JSON.stringify(timerState));
+    else localStorage.removeItem(TIMER_KEY);
+  } catch(e) { console.error("[flourish] タイマーの状態を保存できませんでした", e); }
+}
+/** 開始した日の勉強は翌日ぶんのエントリに入る(studyMin は前日を指すため) */
+function timerTarget(day){ return fmt(addDays(parseD(day), 1)); }
+function timerElapsedMin(){
+  if (!timerState) return 0;
+  return Math.max(0, Math.round((Date.now() - timerState.startedAt) / 60000));
+}
 // CSP が https://*.ts.net しか許さないので、それ以外を入れても送信は黙って失敗する。
 // 違反はコンソールにしか出ず画面からは理由が分からないため、入口で弾いて理由を見せる
 function syncUrlOk(u){
@@ -958,6 +1003,35 @@ function viewLog(today){
   }
 
   h += '<p class="foot">欠損は失敗ではありません。1日抜けても習慣形成には実質影響しない、が実証の示すところです。</p>';
+  return h;
+}
+
+/* ================= タイマー =================
+ *
+ * 記録タブから独立させてある。朝の入力(20秒)と勉強中の計測は使う時間帯も動線も違い、
+ * 同じ画面に置くと朝の一覧にタイマーが混ざる(設計制約3)。
+ */
+function viewTimer(today){
+  var tgt = timerTarget(today);
+  var acc = (S.entries[tgt] || {}).studyMin;
+  var h = '<div class="card"><div class="chead"><span class="ctitle">勉強タイマー</span></div>';
+  if (timerState) {
+    // 経過は描画時点の値で秒刻みには動かない。止めた瞬間に「今 − 開始」で出し直すので記録はずれない
+    h += '<div class="mono" style="font-size:32px;text-align:center;padding:16px 0">'
+      + esc(fmtDur(timerElapsedMin())) + '</div>'
+      + '<button class="sb on on-pine" data-action="timerStop" style="width:100%;padding:12px">■ 停止して記録</button>';
+  } else {
+    h += '<button class="sb on on-pine" data-action="timerStart" style="width:100%;padding:12px">▶ 開始</button>';
+  }
+  h += '</div>';
+  h += '<div class="card"><div class="chead"><span class="ctitle">' + esc(md(tgt)) + ' の勉強</span>'
+    + '<span class="mono" style="color:var(--sub)">'
+    + esc(typeof acc === "number" ? fmtDur(acc) : "—") + '</span></div>'
+    + '<p style="font-size:13px;color:var(--sub);padding:4px 0 0">'
+    + '今日の勉強は、記録タブでは ' + esc(md(tgt)) + ' の欄に入ります'
+    + '(勉強は前日ぶんを翌日に記録するため)。手で直すときはそちらから。</p></div>';
+  h += '<p class="foot">タイマーは開始時刻だけを覚えます。アプリを閉じても経過は進み、'
+    + '止めたときに実時間で記録します。押し忘れたぶんは記録タブで直接入力できます。</p>';
   return h;
 }
 
@@ -1436,15 +1510,16 @@ function viewSettings(){
   h += '</div></div>';
 
   h += '<p class="foot">データはこの端末のブラウザ(このアプリ)内にのみ保存されます。バックアップはJSONコピーで。'
-    + 'このアプリの役割は計測と週次フィードバックまで — 行動を変えるのは環境設計の仕事です。 v4.7</p>';
+    + 'このアプリの役割は計測と週次フィードバックまで — 行動を変えるのは環境設計の仕事です。 v4.9</p>';
   return h;
 }
 
 /* ================= レンダリング ================= */
-var TABS=[["log","記録"],["week","週"],["trend","推移"],["review","週報"],["settings","設定"]];
+var TABS=[["log","記録"],["timer","タイマー"],["week","週"],["trend","推移"],["review","週報"],["settings","設定"]];
 function render(){
   var today = fmt(new Date());
   var v = tab==="log" ? viewLog(today)
+    : tab==="timer" ? viewTimer(today)
     : tab==="week" ? viewWeek(today)
     : tab==="trend" ? viewTrend(today)
     : tab==="review" ? viewReview(today)
@@ -1543,6 +1618,29 @@ document.addEventListener("click", function(ev){
     if (!lab) return;
     S.custom.push({id: "c_" + Date.now().toString(36), label: lab, target: 5});
     save(); render(); return;
+  }
+  if (a === "timerStart") {
+    timerState = {startedAt: Date.now(), day: fmt(new Date())};
+    persistTimer(); flash("タイマー開始", false); render(); return;
+  }
+  if (a === "timerStop") {
+    var mins = timerElapsedMin();
+    var tday = timerTarget(timerState.day);
+    timerState = null; persistTimer();
+    // 止め忘れは「実際より長い」方向にしか壊れない。黙って足すと週の合計が一度で狂い、
+    // しかも後から見て異常だと気づけない。記録せず、手入力へ回す
+    if (mins > TIMER_MAX_MIN) {
+      flash(fmtDur(mins) + " は長すぎるため記録していません", true);
+      render(); return;
+    }
+    if (mins > 0) {
+      var te = Object.assign({}, S.entries[tday] || {});
+      te.studyMin = (typeof te.studyMin === "number" ? te.studyMin : 0) + mins;
+      S.entries[tday] = te;
+      save();
+    }
+    flash(mins > 0 ? fmtDur(mins) + " を記録しました" : "1分未満のため記録していません", false);
+    render(); return;
   }
   if (a === "memo") { memoOpen = true; render(); return; }
   if (a === "expcsv" || a === "expjson") {
@@ -1675,6 +1773,8 @@ window.__flourish = {
   BEDTIME_MIN: BEDTIME_MIN, WAKE_MIN: WAKE_MIN, YT_MIN: YT_MIN, WATER_ML: WATER_ML,
   WORK_MIN: WORK_MIN, LOAD_OPTS: LOAD_OPTS,
   STUDY_MIN: STUDY_MIN, studyDone: studyDone,
+  TIMER_KEY: TIMER_KEY, TIMER_MAX_MIN: TIMER_MAX_MIN,
+  getTimer: function(){ return timerState; },
   fmtHM: fmtHM, fmtDur: fmtDur, fmtMl: fmtMl,
 };
 
