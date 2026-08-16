@@ -210,6 +210,8 @@ var CORE = [
   {id:"gym", label:"ジム"},
   {id:"study", label:"勉強"},
   {id:"sauna", label:"サウナ"},
+  {id:"bath", label:"お風呂・肌ケア"},
+  {id:"mouth", label:"マウスケア"},
   {id:"protein", label:"タンパク質"},
   {id:"steps", label:"歩数"},
   // 「飲んだ」を達成にすると週タブの「◯/◯」が逆さに読めるので、飲まなかった日を数える向きで持つ
@@ -229,13 +231,13 @@ function md(s){ return (+s.slice(5,7))+"/"+(+s.slice(8,10)); }
 /* ================= データ ================= */
 function defaultData(){
   return {
-    version: 9,
-    targets: {bedtimeMin:5, youtubeMin:5, ashwagandha:6, coffee:6, creatine:6, weight:5, gym:3, study:5, sauna:2, protein:6, steps:5, sober:4, meal:5, supp:6},
+    version: 10,
+    targets: {bedtimeMin:5, youtubeMin:5, ashwagandha:6, coffee:6, creatine:6, weight:5, gym:3, study:5, sauna:2, bath:6, mouth:6, protein:6, steps:5, sober:4, meal:5, supp:6},
     // 分の実値。境界は v8 までの選択肢と同じに保つ(24:00以内 / 1h以内)。
     // 入力が15分刻みになっても達成ラインは粗いままにする — 15分単位で締め上げられる状態は
     // 完璧主義に対する逆向きのラチェットになるため(設計制約1の趣旨)
     th: {bedtimeMin:1440, youtubeMin:60, steps:2},
-    enabled: {bedtimeMin:true, wakeMin:true, sleepFeel:true, youtubeMin:true, ashwagandha:true, coffee:true, creatine:true, weight:true, gym:true, study:true, sauna:true, protein:true, steps:true, sober:true, meal:true, supp:true, mood:true},
+    enabled: {bedtimeMin:true, wakeMin:true, sleepFeel:true, youtubeMin:true, ashwagandha:true, coffee:true, creatine:true, weight:true, gym:true, study:true, sauna:true, bath:true, mouth:true, protein:true, steps:true, sober:true, meal:true, supp:true, mood:true},
     custom: [],
     entries: {},
     lastBackup: null,
@@ -277,10 +279,10 @@ function migrate(d){
   var from = Number(isPlainObject(d) ? d.version : 0);
   if (!isFinite(from)) from = 0;
   // v3 で lastBackup、v4 で起床時刻(wake)と朝コーヒー(coffee)、v5 でサウナ・歩数・休肝日・食事の節制、
-  // v6 で整腸剤・サプリ、v7 でタンパク質、v8 で気分を追加。
+  // v6 で整腸剤・サプリ、v7 でタンパク質、v8 で気分、v10 でお風呂・肌ケアとマウスケアを追加。
   // 追加した項目はいずれも欠損が既定値で埋まるので値の変換は要らない。
   // 値の変換が要るのは2つだけ: v7 の歩数4段階化と、v9 の就寝・起床・YouTube の分値化
-  o.version = 9;
+  o.version = 10;
   o.lastBackup = (d && typeof d.lastBackup === "string") ? d.lastBackup : null;
   o.targets = Object.assign({}, b.targets, isPlainObject(d && d.targets) ? d.targets : {});
   o.th = Object.assign({}, b.th, isPlainObject(d && d.th) ? d.th : {});
@@ -424,7 +426,7 @@ function csvCell(v){
   return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g,'""') + '"' : s;
 }
 function buildCSV(data){
-  var cols=["date","就寝時刻(分)","起床時刻(分)","眠れた感","YouTube(分)","アシュワガンダ","朝コーヒー","クレアチン","体重測定","体重","ジム","勉強","サウナ","タンパク質","歩数","休肝日"]
+  var cols=["date","就寝時刻(分)","起床時刻(分)","眠れた感","YouTube(分)","アシュワガンダ","朝コーヒー","クレアチン","体重測定","体重","ジム","勉強","サウナ","お風呂・肌ケア","マウスケア","タンパク質","歩数","休肝日"]
     .concat(perDayParts().map(function(p){return p.label;}))
     .concat(MOOD.parts.map(function(p){return p.label+"の気分";}))
     .concat(data.custom.map(function(c){return c.label;}));
@@ -439,7 +441,7 @@ function buildCSV(data){
       e.sleepFeel!=null?SLEEP_OPTS[e.sleepFeel]:"",
       e.youtubeMin!=null?e.youtubeMin:"",
       b(e.ashwagandha), b(e.coffee), b(e.creatine), b(e.weight), e.weightVal!=null?e.weightVal:"", b(e.gym), b(e.study),
-      b(e.sauna), b(e.protein), e.steps!=null?STEP_OPTS[e.steps]:"", b(e.sober)]
+      b(e.sauna), b(e.bath), b(e.mouth), b(e.protein), e.steps!=null?STEP_OPTS[e.steps]:"", b(e.sober)]
       .concat(perDayParts().map(function(p){return b(e[p.id]);}))
       .concat(MOOD.parts.map(function(p){return e[p.id]!=null?MOOD_OPTS[e[p.id]]:"";}))
       .concat(data.custom.map(function(c){return b(e[c.id]);}));
@@ -738,6 +740,8 @@ function viewLog(today){
   if (en.gym) fields.push(e.gym!=null);
   if (en.study) fields.push(e.study!=null);
   if (en.sauna) fields.push(e.sauna!=null);
+  if (en.bath) fields.push(e.bath!=null);
+  if (en.mouth) fields.push(e.mouth!=null);
   if (en.protein) fields.push(e.protein!=null);
   if (en.steps) fields.push(e.steps!=null);
   if (en.sober) fields.push(e.sober!=null);
@@ -787,6 +791,11 @@ function viewLog(today){
     seg("steps", STEP_OPTS, e.steps!=null?e.steps:null, ["on-sienna","on-sienna","on-pine","on-pine"]));
   if (en.gym) y += row("ジム","", pairBtn("gym", e.gym!=null?e.gym:null));
   if (en.sauna) y += row("サウナ","", pairBtn("sauna", e.sauna!=null?e.sauna:null));
+  // 「両方」が何を指すかはオーナーの定義に委ねる。アプリは中身を決めない(タンパク質の「規定量」と同じ)
+  if (en.bath) y += row("お風呂・肌ケア","両方そろって達成",
+    pairBtn("bath", e.bath!=null?e.bath:null, {t:"✓ 両方した", f:"✗ しなかった"}));
+  if (en.mouth) y += row("マウスケア","両方そろって達成",
+    pairBtn("mouth", e.mouth!=null?e.mouth:null, {t:"✓ 両方した", f:"✗ しなかった"}));
   if (en.protein) y += row("タンパク質","規定量以上とれたか", pairBtn("protein", e.protein!=null?e.protein:null));
   if (en.study) y += row("勉強","15分以上で達成", pairBtn("study", e.study!=null?e.study:null));
   if (en.sober) y += row("休肝日","前日に酒を飲んだか",
@@ -1212,7 +1221,7 @@ function viewSettings(){
   h += '</select></div></div>';
 
   h += '<div class="card"><div class="chead"><span class="ctitle">表示する項目</span></div>';
-  var togs=[["bedtimeMin","就寝時刻"],["wakeMin","起床時刻"],["sleepFeel","眠れた感"],["youtubeMin","YouTube"],["ashwagandha","アシュワガンダ"],["coffee","朝コーヒー"],["creatine","クレアチン"],["weight","体重測定"],["gym","ジム"],["study","勉強"],["sauna","サウナ"],["protein","タンパク質"],["steps","歩数"],["sober","休肝日"]]
+  var togs=[["bedtimeMin","就寝時刻"],["wakeMin","起床時刻"],["sleepFeel","眠れた感"],["youtubeMin","YouTube"],["ashwagandha","アシュワガンダ"],["coffee","朝コーヒー"],["creatine","クレアチン"],["weight","体重測定"],["gym","ジム"],["study","勉強"],["sauna","サウナ"],["bath","お風呂・肌ケア"],["mouth","マウスケア"],["protein","タンパク質"],["steps","歩数"],["sober","休肝日"]]
     .concat(PERDAY.map(function(g){ return [g.id, g.label]; }))
     .concat([[MOOD.id, MOOD.label]]);
   togs.forEach(function(t){

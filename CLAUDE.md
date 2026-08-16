@@ -98,7 +98,7 @@ Claude.ai チャット上で要件定義〜v2.0まで開発された。本書は
   これが seg の同値タップに相当する。
 - 再描画で入力フォーカスが飛ぶため、自由入力は `change` イベント(blur/確定時)でのみ処理する方針。踏襲すること。
 
-### データモデル(localStorage `flourish-log-v2`、schema v9)
+### データモデル(localStorage `flourish-log-v2`、schema v10)
 
 形は `defaultData()` を読めば分かる。コードから読み取れない意味論だけを書く。
 
@@ -110,7 +110,7 @@ Claude.ai チャット上で要件定義〜v2.0まで開発された。本書は
   刻みを揃えたくなったらオーナーに相談すること。
 - **entriesの意味論(重要)**: キーの日付=「記録した朝」。フィールドが指す時点は
   前夜(bedtimeMin, ashwagandha)/ 当朝(wakeMin, sleepFeel, coffee, creatine, weight, weightVal)/
-  前日(youtubeMin, gym, study, sauna, protein, steps, sober, カスタム)/
+  前日(youtubeMin, gym, study, sauna, bath, mouth, protein, steps, sober, カスタム)/
   **当日(`PERDAY` の各 `parts` と `MOOD.parts`)**。
   **カスタム項目は必ず前日を指す**(「昨日」カードに描画される)。当朝・前夜の行動を足すときは `CORE` 側に置くこと。
 - **`PERDAY` の項目だけが当日を指す(v2.6 で食事、v2.7 で整腸剤・サプリ)。** 朝にまとめて入力する

@@ -133,7 +133,7 @@ describe("PWA v4.0: ロジック(移植の同一性)", () => {
     const [head, row] = f.buildCSV(d).split("\n");
     expect(head).toContain("就寝時刻(分)");
     // 分の実値をそのまま出す。1512=25:12(v9 の移行値)、390=6:30、30=30分
-    expect(row).toBe("2026-08-08,1512,390,普通,30,0,1,1,1,68.5,0,1,,,,,,,,,,,,,");
+    expect(row).toBe("2026-08-08,1512,390,普通,30,0,1,1,1,68.5,0,1,,,,,,,,,,,,,,,");
   });
 
   it("週報コピー用テキストに凡例と今週/前週JSONが含まれる", () => {
@@ -300,7 +300,7 @@ describe("PWA v4.0: CSVの列ずれ", () => {
     const [head, row] = f.buildCSV(d).split("\n");
     expect(head).toContain('"読書, 英語"');
     expect(head.split('"').length).toBe(3); // 引用符は1フィールド分の2つだけ
-    expect(row).toBe("2026-08-08,,,,,,,,,,1,,,,,,,,,,,,,,,1");
+    expect(row).toBe("2026-08-08,,,,,,,,,,1,,,,,,,,,,,,,,,,,1");
   });
 
   it("引用符を含むラベルは二重引用符でエスケープする", () => {
@@ -460,7 +460,7 @@ describe("PWA v4.0: 取り込んだJSONを信用しない", () => {
   it("lastBackup を持たない v2 データも読める", () => {
     const f = boot().window.__flourish;
     const m = f.migrate({ version: 2, entries: { "2026-08-01": { gym: true } } });
-    expect(m.version).toBe(9);
+    expect(m.version).toBe(10);
     expect(m.lastBackup).toBe(null);
     expect(m.entries["2026-08-01"].gym).toBe(true);
   });
@@ -636,7 +636,7 @@ describe("PWA v4.0: 起床時刻(計測のみ)", () => {
     d.entries["2026-08-08"] = { bedtimeMin: 1320, wakeMin: 450 };
     const [head, row] = f.buildCSV(d).split("\n");
     expect(head).toContain("起床時刻(分)");
-    expect(row).toBe("2026-08-08,1320,450,,,,,,,,,,,,,,,,,,,,,,");
+    expect(row).toBe("2026-08-08,1320,450,,,,,,,,,,,,,,,,,,,,,,,,");
     const t = f.buildReviewText(d, "2026-08-08");
     expect(t).toContain("wakeMin");
     expect(t).toContain("分の実値");
@@ -647,7 +647,7 @@ describe("PWA v4.0: 起床時刻(計測のみ)", () => {
   it("wake を持たない旧データも読め、version が上がる", () => {
     const f = boot().window.__flourish;
     const m = f.migrate({ version: 3, entries: { "2026-08-01": { bedtime: 1 } } });
-    expect(m.version).toBe(9);
+    expect(m.version).toBe(10);
     expect(m.enabled.wakeMin).toBe(true);
     expect(m.entries["2026-08-01"]).toEqual({ bedtimeMin: 1410 });
   });
@@ -914,7 +914,7 @@ describe("PWA v4.0: 朝コーヒー", () => {
     const [head, row] = f.buildCSV(d).split("\n");
     expect(head).toContain("朝コーヒー");
     expect(head.split(",").indexOf("朝コーヒー")).toBe(head.split(",").indexOf("クレアチン") - 1);
-    expect(row).toBe("2026-08-08,,,,,,0,,,,,,,,,,,,,,,,,,");
+    expect(row).toBe("2026-08-08,,,,,,0,,,,,,,,,,,,,,,,,,,,");
   });
 
   it("coffee を持たない旧データも既定値で埋まる", () => {
@@ -1104,7 +1104,7 @@ describe("PWA v4.0: v5 スキーマ", () => {
       th: { bedtime: 0 },
       entries: { "2026-08-01": { gym: true } },
     });
-    expect(m.version).toBe(9);
+    expect(m.version).toBe(10);
     expect(m.targets.gym).toBe(4);
     expect(m.th.bedtimeMin).toBe(1380);
     // 達成ラインを設定していない旧データは、シフトの対象ではなく新既定で埋まる
@@ -1136,7 +1136,7 @@ describe("PWA v4.0: v5 スキーマ", () => {
     d.entries["2026-08-08"] = { sauna: true, steps: 3, sober: false, mealB: true, mealD: false };
     const [head, row] = f.buildCSV(d).split("\n");
     ["サウナ", "歩数", "休肝日", "朝食", "昼食", "夕食"].forEach((c) => expect(head).toContain(c));
-    expect(row).toBe("2026-08-08,,,,,,,,,,,,1,,1万以上,0,1,,0,,,,,,");
+    expect(row).toBe("2026-08-08,,,,,,,,,,,,1,,,,1万以上,0,1,,0,,,,,,");
     const t = f.buildReviewText(d, "2026-08-08");
     expect(t).toContain("steps=[3千以下,5千,8千,1万以上]");
     expect(t).toContain("休肝日は酒を飲まなかった日");
@@ -1207,7 +1207,7 @@ describe("PWA v4.0: 整腸剤・サプリ", () => {
   it("v5 データを読んでも既存の設定を保ち、サプリは既定値で埋まる", () => {
     const f = boot().window.__flourish;
     const m = f.migrate({ version: 5, targets: { meal: 3 }, entries: { "2026-08-01": { mealB: true } } });
-    expect(m.version).toBe(9);
+    expect(m.version).toBe(10);
     expect(m.targets.meal).toBe(3);
     expect(m.targets.supp).toBe(6);
     expect(m.enabled.supp).toBe(true);
@@ -1220,7 +1220,7 @@ describe("PWA v4.0: 整腸剤・サプリ", () => {
     d.entries["2026-08-08"] = { suppM: true, suppE: false };
     const [head, row] = f.buildCSV(d).split("\n");
     ["朝サプリ", "昼サプリ", "晩サプリ"].forEach((c) => expect(head).toContain(c));
-    expect(row).toBe("2026-08-08,,,,,,,,,,,,,,,,,,,1,,0,,,");
+    expect(row).toBe("2026-08-08,,,,,,,,,,,,,,,,,,,,,1,,0,,,");
     expect(f.buildReviewText(d, "2026-08-08")).toContain("食事の節制と整腸剤・サプリは1日3回ぶんを記録し");
   });
 });
@@ -1555,7 +1555,7 @@ describe("PWA v4.0: v7 スキーマ(歩数の4段階化)", () => {
         "2026-08-03": { steps: 2 },
       },
     });
-    expect(m.version).toBe(9);
+    expect(m.version).toBe(10);
     expect(m.th.steps).toBe(2);
     expect(m.entries["2026-08-01"].steps).toBe(1);
     expect(m.entries["2026-08-02"]).toEqual({ steps: 2, gym: true });
@@ -1713,7 +1713,7 @@ describe("PWA v4.0: タンパク質", () => {
     expect(wrow.querySelectorAll(".dot.ok").length).toBe(1);
   });
 
-  it("CSVにタンパク質の列がサウナと歩数の間に入る", () => {
+  it("CSVにタンパク質の列が歩数の手前に入る", () => {
     const f = boot().window.__flourish;
     const d = f.defaultData();
     d.entries["2026-08-08"] = { protein: false };
@@ -1723,7 +1723,6 @@ describe("PWA v4.0: タンパク質", () => {
     expect(i).toBeGreaterThan(-1);
     expect(row.split(",")[i]).toBe("0");
     // 位置がずれると以降の歩数・休肝日・食事・サプリ・カスタムが1つずつ右へ動く
-    expect(cols[i - 1]).toBe("サウナ");
     expect(cols[i + 1]).toBe("歩数");
   });
 
@@ -2179,7 +2178,7 @@ describe("PWA v4.0: v9 スキーマ(就寝・起床・YouTube の分値化)", ()
       enabled: { bedtime: false, wake: true, youtube: true },
       entries: { "2026-08-01": { bedtime: 0, wake: 4, youtube: 3, gym: true } },
     });
-    expect(m.version).toBe(9);
+    expect(m.version).toBe(10);
     expect(m.entries["2026-08-01"]).toEqual({ bedtimeMin: 1380, wakeMin: 492, youtubeMin: 150, gym: true });
     expect(m.th.bedtimeMin).toBe(1410);
     expect(m.th.youtubeMin).toBe(120);
@@ -2274,5 +2273,95 @@ describe("PWA v4.0: v9 スキーマ(就寝・起床・YouTube の分値化)", ()
     byText(dom, "button.tb", "設定").click();
     expect([...q(dom, '[data-th="bedtimeMin"]').options].map((o) => o.value)).toEqual(["1380", "1410", "1440", "1470"]);
     expect([...q(dom, '[data-th="youtubeMin"]').options].map((o) => o.value)).toEqual(["30", "60", "120"]);
+  });
+});
+
+describe("PWA v4.0: お風呂・肌ケア / マウスケア", () => {
+  const today = (f) => f.fmt(new Date());
+  const ITEMS = [
+    { id: "bath", label: "お風呂・肌ケア" },
+    { id: "mouth", label: "マウスケア" },
+  ];
+
+  // 前日を指す項目なので「昨日」カードに置く。「今朝」に置くと指す時点が変わる
+  it("「昨日」カードにあり、1タップで保存される", () => {
+    const dom = boot();
+    const f = dom.window.__flourish;
+    const card = qa(dom, ".card").find((el) => el.textContent.includes("昨日"));
+    ITEMS.forEach(({ id, label }) => {
+      expect(card.textContent).toContain(label);
+      expect(card.querySelector(`[data-f="${id}"]`)).not.toBe(null);
+    });
+    q(dom, '[data-f="bath"][data-v="t"]').click();
+    q(dom, '[data-f="mouth"][data-v="f"]').click();
+    expect(JSON.parse(dom.window.localStorage.getItem(KEY)).entries[today(f)]).toEqual({ bath: true, mouth: false });
+  });
+
+  // 「両方」が何を指すかはオーナーの定義。アプリは中身を決めない(タンパク質の「規定量」と同じ)
+  it("ボタンのラベルが「両方した / しなかった」になっている", () => {
+    const dom = boot();
+    ITEMS.forEach(({ id }) => {
+      expect(q(dom, `[data-f="${id}"][data-v="t"]`).textContent).toBe("✓ 両方した");
+      expect(q(dom, `[data-f="${id}"][data-v="f"]`).textContent).toBe("✗ しなかった");
+    });
+    const card = qa(dom, ".card").find((el) => el.textContent.includes("昨日"));
+    expect(card.textContent).toContain("両方そろって達成");
+  });
+
+  it("達成判定は「した」だけが達成で、未入力は未達にしない", () => {
+    const f = boot().window.__flourish;
+    const d = f.defaultData();
+    ITEMS.forEach(({ id }) => {
+      expect(f.achieved(d, { [id]: true }, id)).toBe(true);
+      expect(f.achieved(d, { [id]: false }, id)).toBe(false);
+      expect(f.achieved(d, {}, id)).toBe(null);
+    });
+  });
+
+  it("週タブと週の目標に並ぶ", () => {
+    const f0 = boot().window.__flourish;
+    const d = f0.defaultData();
+    d.entries[today(f0)] = { bath: true, mouth: true };
+    const dom = boot(JSON.stringify(d));
+    byText(dom, "button.tb", "週").click();
+    ITEMS.forEach(({ id, label }) => {
+      const wrow = qa(dom, ".wrow").find((el) => el.textContent.includes(label));
+      expect(wrow.textContent).toContain("1/" + d.targets[id]);
+      expect(wrow.querySelectorAll(".dot.ok").length).toBe(1);
+    });
+  });
+
+  it("CSVに2列が入り、値が自分のラベルの下に出る", () => {
+    const f = boot().window.__flourish;
+    const d = f.defaultData();
+    d.entries["2026-08-08"] = { bath: true, mouth: false };
+    const [head, row] = f.buildCSV(d).split("\n");
+    const cols = head.split(",");
+    const cells = row.split(",");
+    expect(cells[cols.indexOf("お風呂・肌ケア")]).toBe("1");
+    expect(cells[cols.indexOf("マウスケア")]).toBe("0");
+  });
+
+  it("v9 データを読んでも既定値で埋まり、既存の設定は残る", () => {
+    const f = boot().window.__flourish;
+    const m = f.migrate({ version: 9, targets: { gym: 4 }, entries: { "2026-08-01": { gym: true } } });
+    expect(m.version).toBe(10);
+    ITEMS.forEach(({ id }) => {
+      expect(m.targets[id]).toBe(6);
+      expect(m.enabled[id]).toBe(true);
+    });
+    expect(m.targets.gym).toBe(4);
+    expect(m.entries["2026-08-01"]).toEqual({ gym: true }); // 値の変換は要らない
+  });
+
+  it("表示トグルを切ると記録タブから消える", () => {
+    const dom = boot();
+    ITEMS.forEach(({ id }) => {
+      expect(q(dom, `[data-f="${id}"]`)).not.toBe(null);
+      byText(dom, "button.tb", "設定").click();
+      q(dom, `[data-tog="${id}"]`).click();
+      byText(dom, "button.tb", "記録").click();
+      expect(q(dom, `[data-f="${id}"]`)).toBe(null);
+    });
   });
 });
