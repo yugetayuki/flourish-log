@@ -3,7 +3,7 @@
 個人用の朝の行動計測PWA。オーナーの幸福(flourishing)フレームワーク実装の一部として、
 Claude.ai チャット上で要件定義〜v2.0まで開発された。本書は Claude Code への引き継ぎ資料。
 
-- 最終更新: 2026-08-16 / 現行バージョン: **v4.10**(`index.html` 内 eyebrow 表記と一致させること)
+- 最終更新: 2026-08-16 / 現行バージョン: **v4.11**(`index.html` 内 eyebrow 表記と一致させること)
 - テスト: `npm install && npm test`(vitest) と `npm run smoke`(実ブラウザ)。
   本数は `pwa.test.js` と `tools/smoke.mjs` が正なのでここには書かない
 
@@ -44,11 +44,23 @@ Claude.ai チャット上で要件定義〜v2.0まで開発された。本書は
 
 **死守すべき設計制約7項目と「恒久的にやらないこと」は `.claude/rules/10-guardrails.md` にある。**
 このファイルと同じく毎セッション読み込まれる。受け入れ基準はそちらが正。
-判断に迷う変更は `guardrail-reviewer` サブエージェントに審査させる。
+
+**次のいずれかに当たる変更は、コミット前に `guardrail-reviewer` サブエージェントへ出す。**
+「判断に迷ったら」ではなく、条件で決める(制約5に触れる変更は自然な改善に見えるため、迷い自体が起きない):
+
+- 記録項目を足す・消す・改名する
+- 画面に出る文言を変える(ラベル・注記・週報テキストの指示文を含む)
+- 週タブ・目標・相関ヒント・月間ビューの**集計や表示の対象**を変える
+- 達成判定(`achieved` / `studyDone` / `th`)に触れる
+- `/release` を実行する(スキルの手順2。最後の関門)
+
+審査役はコードの良し悪しを見ない。制約への抵触だけを見る。
+**指摘が出たら実装を自分で変えず、オーナーへ上げる。** 制約はオーナーとの合意事項なので、
+抵触の解消は設計判断であって実装の調整ではない。
 
 ---
 
-## 2. 現状(v4.10)
+## 2. 現状(v4.11)
 
 - **形態**: 依存ゼロのPWA。出荷物は `index.html` と `sw.js` の2本だけ。
   vanilla JS + インラインCSS + インラインSVGチャート。フレームワーク・CDN・ビルド工程なし
@@ -103,7 +115,7 @@ Claude.ai チャット上で要件定義〜v2.0まで開発された。本書は
   これが seg の同値タップに相当する。
 - 再描画で入力フォーカスが飛ぶため、自由入力は `change` イベント(blur/確定時)でのみ処理する方針。踏襲すること。
 
-### データモデル(localStorage `flourish-log-v2`、schema v14)
+### データモデル(localStorage `flourish-log-v2`、schema v16)
 
 形は `defaultData()` を読めば分かる。コードから読み取れない意味論だけを書く。
 
@@ -118,7 +130,7 @@ Claude.ai チャット上で要件定義〜v2.0まで開発された。本書は
   刻みを揃えたくなったらオーナーに相談すること。
 - **entriesの意味論(重要)**: キーの日付=「記録した朝」。フィールドが指す時点は
   前夜(bedtimeMin, ashwagandha)/ 当朝(wakeMin, sleepFeel, coffee, creatine, weight, weightVal)/
-  前日(youtubeMin, waterMl, gym, studyMin, sauna, bath, mouth, protein, steps, sober, companion, カスタム)/
+  前日(youtubeMin, stepsCount, waterMl, workMin, workLoad, gym, studyMin, sauna, bath, mouth, protein, steps, sober, companion, カスタム)/
   **当日(`PERDAY` の各 `parts` と `MOOD.parts`)**。
   **カスタム項目は必ず前日を指す**(「昨日」カードに描画される)。当朝・前夜の行動を足すときは `CORE` 側に置くこと。
 - **`PERDAY` の項目だけが当日を指す(v2.6 で食事、v2.7 で整腸剤・サプリ)。** 朝にまとめて入力する
