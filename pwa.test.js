@@ -22,6 +22,23 @@ const byText = (dom, sel, text) => qa(dom, sel).find((el) => el.textContent.trim
 const tick = () => new Promise((r) => setTimeout(r, 0));
 const stubClipboard = (dom, impl) => { dom.window.navigator.clipboard = { writeText: impl }; };
 // 分の実値は select。change を発火させないと保存されない
+// 値の表を手で持つと、数値項目を足すたびに3箇所直すことになり必ず忘れる。
+// 記録タブの描画から型を導く: select と段階ボタンは数値、✓/✗ の2択は真偽値
+const numericSamples = () => {
+  const dom = boot();
+  const out = {};
+  qa(dom, "#view [data-f]").forEach((el) => {
+    const f = el.dataset.f;
+    if (f in out) return;
+    if (el.tagName === "SELECT") {
+      const v = [...el.options].map((o) => o.value).find((x) => x !== "");
+      out[f] = Number(v);
+    } else if (el.dataset.v !== "t" && el.dataset.v !== "f") {
+      out[f] = Number(el.dataset.v); // seg の段階
+    }
+  });
+  return out;
+};
 const pickMin = (dom, f, v) => {
   const s = dom.window.document.querySelector(`select[data-f="${f}"]`);
   s.value = v;
@@ -133,7 +150,7 @@ describe("PWA v4.7: ロジック(移植の同一性)", () => {
     const [head, row] = f.buildCSV(d).split("\n");
     expect(head).toContain("就寝時刻(分)");
     // 分の実値をそのまま出す。1512=25:12(v9 の移行値)、390=6:30、30=30分
-    expect(row).toBe("2026-08-08,1512,390,普通,30,0,1,1,1,68.5,0,1,,,,,,,,,,,,,,,,,,,");
+    expect(row).toBe("2026-08-08,1512,390,普通,30,0,1,1,1,68.5,0,1,,,,,,,,,,,,,,,,,,,,,");
   });
 
   it("週報コピー用テキストに凡例と今週/前週JSONが含まれる", () => {
@@ -300,7 +317,7 @@ describe("PWA v4.7: CSVの列ずれ", () => {
     const [head, row] = f.buildCSV(d).split("\n");
     expect(head).toContain('"読書, 英語"');
     expect(head.split('"').length).toBe(3); // 引用符は1フィールド分の2つだけ
-    expect(row).toBe("2026-08-08,,,,,,,,,,1,,,,,,,,,,,,,,,,,,,,,1");
+    expect(row).toBe("2026-08-08,,,,,,,,,,1,,,,,,,,,,,,,,,,,,,,,,,1");
   });
 
   it("引用符を含むラベルは二重引用符でエスケープする", () => {
@@ -460,7 +477,7 @@ describe("PWA v4.7: 取り込んだJSONを信用しない", () => {
   it("lastBackup を持たない v2 データも読める", () => {
     const f = boot().window.__flourish;
     const m = f.migrate({ version: 2, entries: { "2026-08-01": { gym: true } } });
-    expect(m.version).toBe(14);
+    expect(m.version).toBe(15);
     expect(m.lastBackup).toBe(null);
     expect(m.entries["2026-08-01"].gym).toBe(true);
   });
@@ -636,7 +653,7 @@ describe("PWA v4.7: 起床時刻(計測のみ)", () => {
     d.entries["2026-08-08"] = { bedtimeMin: 1320, wakeMin: 450 };
     const [head, row] = f.buildCSV(d).split("\n");
     expect(head).toContain("起床時刻(分)");
-    expect(row).toBe("2026-08-08,1320,450,,,,,,,,,,,,,,,,,,,,,,,,,,,,");
+    expect(row).toBe("2026-08-08,1320,450,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,");
     const t = f.buildReviewText(d, "2026-08-08");
     expect(t).toContain("wakeMin");
     expect(t).toContain("分の実値");
@@ -647,7 +664,7 @@ describe("PWA v4.7: 起床時刻(計測のみ)", () => {
   it("wake を持たない旧データも読め、version が上がる", () => {
     const f = boot().window.__flourish;
     const m = f.migrate({ version: 3, entries: { "2026-08-01": { bedtime: 1 } } });
-    expect(m.version).toBe(14);
+    expect(m.version).toBe(15);
     expect(m.enabled.wakeMin).toBe(true);
     expect(m.entries["2026-08-01"]).toEqual({ bedtimeMin: 1410 });
   });
@@ -1044,7 +1061,7 @@ describe("PWA v4.7: ひとこと(その日の出来事)", () => {
   it("memo を持たない旧データも読め、version が上がる", () => {
     const f = boot().window.__flourish;
     const m = f.migrate({ version: 11, entries: { "2026-08-01": { gym: true } } });
-    expect(m.version).toBe(14);
+    expect(m.version).toBe(15);
     expect(m.entries["2026-08-01"].memo).toBe(undefined);
   });
 });
@@ -1114,7 +1131,7 @@ describe("PWA v4.7: 誰と過ごしたか(計測のみ)", () => {
   it("companion を持たない旧データも読め、version が上がる", () => {
     const f = boot().window.__flourish;
     const m = f.migrate({ version: 10, entries: { "2026-08-01": { gym: true } } });
-    expect(m.version).toBe(14);
+    expect(m.version).toBe(15);
     expect(m.enabled.companion).toBe(true);
     expect(m.entries["2026-08-01"].companion).toBe(undefined);
   });
@@ -1152,7 +1169,7 @@ describe("PWA v4.7: 朝コーヒー", () => {
     const [head, row] = f.buildCSV(d).split("\n");
     expect(head).toContain("朝コーヒー");
     expect(head.split(",").indexOf("朝コーヒー")).toBe(head.split(",").indexOf("クレアチン") - 1);
-    expect(row).toBe("2026-08-08,,,,,,0,,,,,,,,,,,,,,,,,,,,,,,,");
+    expect(row).toBe("2026-08-08,,,,,,0,,,,,,,,,,,,,,,,,,,,,,,,,,");
   });
 
   it("coffee を持たない旧データも既定値で埋まる", () => {
@@ -1342,7 +1359,7 @@ describe("PWA v4.7: v5 スキーマ", () => {
       th: { bedtime: 0 },
       entries: { "2026-08-01": { gym: true } },
     });
-    expect(m.version).toBe(14);
+    expect(m.version).toBe(15);
     expect(m.targets.gym).toBe(4);
     expect(m.th.bedtimeMin).toBe(1380);
     // 達成ラインを設定していない旧データは、シフトの対象ではなく新既定で埋まる
@@ -1374,7 +1391,7 @@ describe("PWA v4.7: v5 スキーマ", () => {
     d.entries["2026-08-08"] = { sauna: true, steps: 3, sober: false, mealB: true, mealD: false };
     const [head, row] = f.buildCSV(d).split("\n");
     ["サウナ", "歩数", "休肝日", "朝食", "昼食", "夕食"].forEach((c) => expect(head).toContain(c));
-    expect(row).toBe("2026-08-08,,,,,,,,,,,,,1,,,,1万以上,,0,,,1,,0,,,,,,");
+    expect(row).toBe("2026-08-08,,,,,,,,,,,,,1,,,,1万以上,,,,0,,,1,,0,,,,,,");
     const t = f.buildReviewText(d, "2026-08-08");
     expect(t).toContain("steps=[3千以下,5千,8千,1万以上]");
     expect(t).toContain("休肝日は酒を飲まなかった日");
@@ -1445,7 +1462,7 @@ describe("PWA v4.7: 整腸剤・サプリ", () => {
   it("v5 データを読んでも既存の設定を保ち、サプリは既定値で埋まる", () => {
     const f = boot().window.__flourish;
     const m = f.migrate({ version: 5, targets: { meal: 3 }, entries: { "2026-08-01": { mealB: true } } });
-    expect(m.version).toBe(14);
+    expect(m.version).toBe(15);
     expect(m.targets.meal).toBe(3);
     expect(m.targets.supp).toBe(6);
     expect(m.enabled.supp).toBe(true);
@@ -1458,7 +1475,7 @@ describe("PWA v4.7: 整腸剤・サプリ", () => {
     d.entries["2026-08-08"] = { suppM: true, suppE: false };
     const [head, row] = f.buildCSV(d).split("\n");
     ["朝サプリ", "昼サプリ", "晩サプリ"].forEach((c) => expect(head).toContain(c));
-    expect(row).toBe("2026-08-08,,,,,,,,,,,,,,,,,,,,,,,,,1,,0,,,");
+    expect(row).toBe("2026-08-08,,,,,,,,,,,,,,,,,,,,,,,,,,,1,,0,,,");
     expect(f.buildReviewText(d, "2026-08-08")).toContain("食事の節制と整腸剤・サプリは1日3回ぶんを記録し");
   });
 });
@@ -1793,7 +1810,7 @@ describe("PWA v4.7: v7 スキーマ(歩数の4段階化)", () => {
         "2026-08-03": { steps: 2 },
       },
     });
-    expect(m.version).toBe(14);
+    expect(m.version).toBe(15);
     expect(m.th.steps).toBe(2);
     expect(m.entries["2026-08-01"].steps).toBe(1);
     expect(m.entries["2026-08-02"]).toEqual({ steps: 2, gym: true });
@@ -2210,7 +2227,7 @@ describe("PWA v4.7: 項目の結線ガード(CORE 起点)", () => {
     const d = f.defaultData();
     // 埋める項目は enabled から導く。CORE や MOOD を手で並べると、
     // 次に計測のみの項目を足したときに「CSV列だけ忘れた」が素通りする
-    const NUM = { bedtimeMin: 1440, wakeMin: 420, sleepFeel: 1, youtubeMin: 60, steps: 1, moodM: 0, moodN: 0, moodE: 0, companion: 1 };
+    const NUM = numericSamples();
     const groups = f.PERDAY.concat([f.MOOD]);
     // weightVal と memo は enabled を持たない自由入力(達成も計測もしない)ので、
     // enabled から導けない。列が落ちたことは検出したいので、ここで手で埋める
@@ -2248,7 +2265,7 @@ describe("PWA v4.7: 項目の結線ガード(CORE 起点)", () => {
   // 項目を1つだけ埋めた行を作り、CSVのどこかに値が出ることで「列がある」ことを確かめる
   it("記録できる項目はすべてCSVに1列以上を持つ", () => {
     const f = boot().window.__flourish;
-    const NUM = { bedtimeMin: 1440, wakeMin: 420, sleepFeel: 1, youtubeMin: 60, steps: 1, moodM: 0, moodN: 0, moodE: 0, companion: 1 };
+    const NUM = numericSamples();
     const groups = f.PERDAY.concat([f.MOOD]);
     Object.keys(f.defaultData().enabled).forEach((id) => {
       const d = f.defaultData();
@@ -2265,7 +2282,7 @@ describe("PWA v4.7: 項目の結線ガード(CORE 起点)", () => {
   // 1項目ずつ埋めて、それぞれが自分だけの列に出ることを確かめる
   it("記録できる項目のCSV列が互いに重ならない", () => {
     const f = boot().window.__flourish;
-    const NUM = { bedtimeMin: 1440, wakeMin: 420, sleepFeel: 1, youtubeMin: 60, steps: 1, moodM: 0, moodN: 0, moodE: 0, companion: 1 };
+    const NUM = numericSamples();
     const groups = f.PERDAY.concat([f.MOOD]);
     const ids = [];
     Object.keys(f.defaultData().enabled).forEach((id) => {
@@ -2420,7 +2437,7 @@ describe("PWA v4.7: v9 スキーマ(就寝・起床・YouTube の分値化)", ()
       enabled: { bedtime: false, wake: true, youtube: true },
       entries: { "2026-08-01": { bedtime: 0, wake: 4, youtube: 3, gym: true } },
     });
-    expect(m.version).toBe(14);
+    expect(m.version).toBe(15);
     expect(m.entries["2026-08-01"]).toEqual({ bedtimeMin: 1380, wakeMin: 492, youtubeMin: 150, gym: true });
     expect(m.th.bedtimeMin).toBe(1410);
     expect(m.th.youtubeMin).toBe(120);
@@ -2591,7 +2608,7 @@ describe("PWA v4.7: お風呂・肌ケア / マウスケア", () => {
   it("v9 データを読んでも既定値で埋まり、既存の設定は残る", () => {
     const f = boot().window.__flourish;
     const m = f.migrate({ version: 9, targets: { gym: 4 }, entries: { "2026-08-01": { gym: true } } });
-    expect(m.version).toBe(14);
+    expect(m.version).toBe(15);
     ITEMS.forEach(({ id }) => {
       expect(m.targets[id]).toBe(6);
       expect(m.enabled[id]).toBe(true);
@@ -2719,10 +2736,96 @@ describe("PWA v4.7: 水分(お試し)", () => {
   it("水分を持たない旧データも既定値で埋まる", () => {
     const f = boot().window.__flourish;
     const m = f.migrate({ version: 12, targets: { gym: 4 }, entries: { "2026-08-01": { gym: true } } });
-    expect(m.version).toBe(14);
+    expect(m.version).toBe(15);
     expect(m.targets.waterMl).toBe(6);
     expect(m.th.waterMl).toBe(2000);
     expect(m.enabled.waterMl).toBe(true);
     expect(m.targets.gym).toBe(4);
+  });
+});
+
+describe("PWA v4.7: 仕事の文脈(業務時間・仕事の重さ)", () => {
+  // これまで記録していたのは結果ばかりで、それを動かす外的要因が1つも無かった。
+  // 「なぜそうなったか」に届かせるための説明変数なので、達成すべき行動ではない
+  it("どちらも目標も達成ラインも持たない(計測のみ)", () => {
+    const f0 = boot().window.__flourish;
+    const d = f0.defaultData();
+    ["workMin", "workLoad"].forEach((id) => {
+      expect(d.enabled[id]).toBe(true);
+      expect(d.targets[id]).toBe(undefined);
+      expect(d.th[id]).toBe(undefined);
+      expect(f0.CORE.some((c) => c.id === id)).toBe(false);
+    });
+    d.entries[f0.fmt(new Date())] = { workMin: 480, workLoad: 2 };
+    const dom = boot(JSON.stringify(d));
+    byText(dom, "button.tb", "週").click();
+    expect(q(dom, "#view").textContent).not.toContain("業務時間");
+    expect(q(dom, "#view").textContent).not.toContain("仕事の重さ");
+    byText(dom, "button.tb", "設定").click();
+    expect(q(dom, '[data-tgt="workMin"]')).toBe(null);
+    expect(q(dom, '[data-th="workLoad"]')).toBe(null);
+  });
+
+  it("業務時間は30分刻みの実値で、0(休み)も記録できる", () => {
+    const dom = boot();
+    const f = dom.window.__flourish;
+    const s = q(dom, 'select[data-f="workMin"]');
+    const vals = [...s.options].slice(1).map((o) => Number(o.value));
+    expect(vals[0]).toBe(0); // 休みの日。曜日に頼らず平日/休日が読める
+    vals.slice(1).forEach((v, i) => expect(v - vals[i]).toBe(30));
+    expect(vals[vals.length - 1]).toBe(840); // 14h まで
+    s.value = "0";
+    s.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
+    expect(JSON.parse(dom.window.localStorage.getItem(KEY)).entries[f.fmt(new Date())]).toEqual({ workMin: 0 });
+  });
+
+  it("仕事の重さは3段階で、主観尺度なので段数を増やさない", () => {
+    const dom = boot();
+    const f = dom.window.__flourish;
+    expect(f.LOAD_OPTS).toEqual(["軽い", "普通", "重い"]);
+    const btns = qa(dom, '[data-f="workLoad"]');
+    expect(btns.map((b) => b.dataset.v)).toEqual(["0", "1", "2"]);
+    btns[2].click();
+    expect(JSON.parse(dom.window.localStorage.getItem(KEY)).entries[f.fmt(new Date())]).toEqual({ workLoad: 2 });
+  });
+
+  it("週報には業務時間の実値と重さの分布を渡し、評価を禁じる注記を付ける", () => {
+    const f = boot().window.__flourish;
+    const d = f.defaultData();
+    const ws = f.weekStart(new Date("2026-08-05T00:00"));
+    const day = (n) => f.fmt(new Date(ws.getFullYear(), ws.getMonth(), ws.getDate() + n));
+    d.entries[day(0)] = { workMin: 600, workLoad: 2 };
+    d.entries[day(1)] = { workMin: 0, workLoad: 0 };
+    const s = f.weekStats(d, ws, day(6));
+    expect(s.workMin).toEqual([0, 600]);
+    expect(s.workLoad).toEqual([1, 0, 1]);
+    const t = f.buildReviewText(d, day(6));
+    expect(t).toContain("workMin");
+    expect(t).toContain("多い少ないを評価しないでください");
+  });
+
+  // 棚卸しで「ジムに行けない理由は仕事との摩擦」と出た。それを検証できる対を置いてある
+  it("相関ヒントに仕事を上流とする対がある", () => {
+    const f0 = boot().window.__flourish;
+    const d = f0.defaultData();
+    for (let i = 0; i < 28; i++) {
+      const dt = new Date("2026-07-01T00:00");
+      dt.setDate(dt.getDate() + i);
+      d.entries[f0.fmt(dt)] = { workLoad: i % 2 === 0 ? 2 : 0, sober: i % 2 !== 0 };
+    }
+    const dom = boot(JSON.stringify(d));
+    byText(dom, "button.tb", "週報").click();
+    const row = qa(dom, "#view .row").find((el) => el.textContent.includes("仕事が重い × 前日に酒を飲んだ"));
+    expect(row).not.toBe(undefined);
+    expect(row.textContent).toContain("φ=1.00");
+  });
+
+  it("仕事の項目を持たない旧データも既定値で埋まる", () => {
+    const f = boot().window.__flourish;
+    const m = f.migrate({ version: 14, entries: { "2026-08-01": { gym: true } } });
+    expect(m.version).toBe(15);
+    expect(m.enabled.workMin).toBe(true);
+    expect(m.enabled.workLoad).toBe(true);
+    expect(m.targets.workMin).toBe(undefined);
   });
 });
