@@ -1210,7 +1210,7 @@ function viewSettings(){
   // 入力が15分刻みでも達成ラインの境界は v8 までと同じ粗さに保つ。15分単位で締め上げられる状態は
   // 完璧主義に対する逆向きのラチェットになるため(設計制約1の趣旨)。刻みを揃えたくなったら要相談
   h += '<div class="srow"><span style="font-size:14px">就寝時刻</span><select data-th="bedtimeMin">';
-  [1380,1410,1440,1470].forEach(function(v){ h += '<option value="'+v+'"'+(S.th.bedtimeMin===v?' selected':'')+'>'+esc(fmtHM(v))+' 以内</option>'; });
+  [1320,1350,1380,1410,1440,1470].forEach(function(v){ h += '<option value="'+v+'"'+(S.th.bedtimeMin===v?' selected':'')+'>'+esc(fmtHM(v))+' 以内</option>'; });
   h += '</select></div>';
   h += '<div class="srow"><span style="font-size:14px">YouTube</span><select data-th="youtubeMin">';
   [30,60,120].forEach(function(v){ h += '<option value="'+v+'"'+(S.th.youtubeMin===v?' selected':'')+'>'+esc(fmtDur(v))+' 以内</option>'; });

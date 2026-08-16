@@ -2267,11 +2267,15 @@ describe("PWA v4.0: v9 スキーマ(就寝・起床・YouTube の分値化)", ()
     expect(s.wakeMin).toEqual([]);
   });
 
-  // 入力が15分刻みでも達成ラインは粗いまま。締め上げの無摩擦化を避けるための意図的な決定
-  it("達成ラインの選択肢は v8 までと同じ境界のまま", () => {
+  // 刻みは30分のまま(締め上げの無摩擦化を避ける)。範囲だけ 22:00 まで下へ広げてある
+  it("達成ラインは30分刻みのまま、22:00 まで選べる", () => {
     const dom = boot();
     byText(dom, "button.tb", "設定").click();
-    expect([...q(dom, '[data-th="bedtimeMin"]').options].map((o) => o.value)).toEqual(["1380", "1410", "1440", "1470"]);
+    const vals = [...q(dom, '[data-th="bedtimeMin"]').options].map((o) => Number(o.value));
+    expect(vals).toEqual([1320, 1350, 1380, 1410, 1440, 1470]);
+    // 隣り合う選択肢の差が30分より細かくならないこと(細分化は別の判断で、勝手に混ぜない)
+    vals.slice(1).forEach((v, i) => expect(v - vals[i]).toBe(30));
+    expect(q(dom, '[data-th="bedtimeMin"]').options[0].text).toBe("22:00 以内");
     expect([...q(dom, '[data-th="youtubeMin"]').options].map((o) => o.value)).toEqual(["30", "60", "120"]);
   });
 });
