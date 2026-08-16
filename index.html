@@ -83,6 +83,11 @@ h1{font-size:18px;font-weight:600;letter-spacing:.10em;margin:0}
 .dot.fut{background:var(--bg)}
 .dhead{display:flex;justify-content:flex-end;gap:4px;margin:4px 0 2px}
 .dh{width:14px;text-align:center;font-size:9px;color:var(--sub)}
+.mhead{display:grid;grid-template-columns:repeat(7,1fr);margin:6px 0 2px}
+.mh{font-size:9px;color:var(--sub);text-align:center}
+.mgrid{display:grid;grid-template-columns:repeat(7,1fr);gap:7px 0}
+.mcell{display:flex;flex-direction:column;align-items:center;gap:3px;min-height:30px}
+.mday{font-size:9px;color:var(--sub)}
 .chips{display:flex;flex-wrap:wrap;gap:8px;padding:8px 0}
 .chip{border:1px solid var(--line);border-radius:10px;padding:4px 8px;font-size:12px;background:var(--bg);color:var(--sub)}
 .chip.hit{background:var(--pinesoft);color:var(--pine)}
@@ -431,6 +436,9 @@ var sel = fmt(new Date());
 var lastToday = sel; // 前回の描画時点で「今日」だった日付。復帰時の日付またぎ検出に使う
 // 推移タブの表示期間。保存しないので開き直すと既定に戻る(朝の一瞥が主用途で、90日は掘るときだけ)
 var trendDays = TREND_OPTS[0];
+// 月間ビューの表示状態。trendDays と同じく保存しない(次に開くとき今月でよい)
+var monItem = null;  // null なら allItems の先頭
+var monOff = 0;      // 0 = 今月、負で過去へ
 var expText = null, expNote = "", revText = null, revNote = "";
 var setNote = "", setNoteOk = false, armed = false, armTimer = null;
 var saveTimer = null;
@@ -874,6 +882,45 @@ function svgSleep(rows){
   });
   return h + '</svg>';
 }
+// 週タブのドット語彙(達成 / 未達 / 未入力 / 未来)を1ヶ月に伸ばしたもの。
+// 連続日数は出さない(制約1)。未入力は miss として未達と区別する(制約2)。
+// 月ごとの目標は持たないので、達成数と記録数を事実として並べるだけにする
+function viewMonth(today){
+  var items = allItems(S).filter(function(it){ return S.enabled[it.id] !== false; });
+  if (!items.length) return "";
+  var cur = items.filter(function(it){ return it.id === monItem; })[0] || items[0];
+  var t = parseD(today);
+  var base = new Date(t.getFullYear(), t.getMonth() + monOff, 1);
+  var last = new Date(base.getFullYear(), base.getMonth()+1, 0).getDate();
+  var ym = base.getFullYear() + "-" + pad(base.getMonth()+1);
+  // 記録より前の月へは戻さない。空のカレンダーをめくれても読むものが無い
+  var keys = Object.keys(S.entries).sort();
+  var cells = '', ok = 0, ent = 0;
+  for (var i=0;i<monIdx(base);i++) cells += '<div class="mcell"></div>';
+  for (var d=1; d<=last; d++){
+    var dt = fmt(new Date(base.getFullYear(), base.getMonth(), d)), st;
+    if (dt > today) st = "fut";
+    else {
+      var a = achieved(S, S.entries[dt], cur.id);
+      if (a === null) st = "miss"; else { ent++; if (a) { st = "ok"; ok++; } else st = "ng"; }
+    }
+    cells += '<div class="mcell"><span class="mday mono">'+d+'</span><span class="dot '+st+'"></span></div>';
+  }
+  var opts = '';
+  items.forEach(function(it){
+    opts += '<option value="'+esc(it.id)+'"'+(it.id===cur.id?' selected':'')+'>'+esc(it.label)+'</option>';
+  });
+  return '<div class="card"><div class="chead"><span class="ctitle">月間</span>'
+    + '<span class="cright mono">達成 '+ok+' / 記録 '+ent+'</span></div>'
+    + '<div class="datebar">'
+    + '<button class="navbtn" data-mo="-1"'+(keys.length && ym > keys[0].slice(0,7) ? '' : ' disabled')+'>‹</button>'
+    + '<div class="datec"><div class="dateT">'+base.getFullYear()+'年'+(base.getMonth()+1)+'月</div></div>'
+    + '<button class="navbtn" data-mo="1"'+(monOff < 0 ? '' : ' disabled')+'>›</button></div>'
+    + '<div class="srow" style="border-top:0;padding-top:0"><select data-mon="1">'+opts+'</select></div>'
+    + '<div class="mhead">'+WDAY.map(function(w){return '<span class="mh">'+w+'</span>';}).join("")+'</div>'
+    + '<div class="mgrid">'+cells+'</div></div>';
+}
+
 function viewTrend(today){
   var rows=[];
   for (var i=trendDays-1;i>=0;i--){
@@ -892,7 +939,7 @@ function viewTrend(today){
       w: (e.weightVal!=null && e.weightVal!=="" && isFinite(wn)) ? wn : null});
   }
   var lab = "(" + trendDays + "日)";
-  var h = '<div class="seg" style="grid-template-columns:1fr 1fr;margin-bottom:12px">';
+  var h = viewMonth(today) + '<div class="seg" style="grid-template-columns:1fr 1fr;margin-bottom:12px">';
   TREND_OPTS.forEach(function(d){
     var on = trendDays === d;
     h += '<button class="sb'+(on?' on on-gray':'')+'" data-td="'+d+'" aria-pressed="'+on+'">'+d+'日</button>';
@@ -1201,6 +1248,9 @@ document.addEventListener("click", function(ev){
   var td = t.closest("[data-td]");
   if (td) { trendDays = +td.dataset.td; render(); return; }
 
+  var mo = t.closest("[data-mo]");
+  if (mo) { monOff = Math.min(0, monOff + (+mo.dataset.mo)); render(); return; }
+
   var tg = t.closest("[data-tgt]");
   if (tg) {
     var id = tg.dataset.tgt, d = +tg.dataset.d;
@@ -1317,6 +1367,8 @@ document.addEventListener("change", function(ev){
     }
     syncCfg.token = tok; saveSync(); syncNote = null; render(); return;
   }
+  var mn = t.closest("[data-mon]");
+  if (mn) { monItem = t.value; render(); return; }
   var th = t.closest("[data-th]");
   if (th) { S.th[th.dataset.th] = +t.value; save(); render(); return; }
 });

@@ -2077,3 +2077,76 @@ describe("PWA v3.0: 項目の結線ガード(CORE 起点)", () => {
     expect(n).toBe(ids.size);
   });
 });
+
+describe("PWA v3.0: 月間ビュー", () => {
+  const AUG = "2026-08-16T09:00"; // 2026-08-01 は土曜。月曜起点なので先頭に空きが5つ
+  const seed = (entries) => {
+    const d = boot().window.__flourish.defaultData();
+    Object.assign(d.entries, entries);
+    return JSON.stringify(d);
+  };
+  const open = (s) => {
+    const dom = boot(s, withClock(AUG));
+    byText(dom, "button.tb", "推移").click();
+    return dom;
+  };
+  const card = (dom) => qa(dom, ".card").find((el) => el.textContent.includes("月間"));
+  const pick = (dom, id) => {
+    const sel = q(dom, "[data-mon]");
+    sel.value = id;
+    sel.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
+  };
+
+  it("推移タブに当月のカレンダーが月曜起点で出る", () => {
+    const dom = open();
+    expect(card(dom)).not.toBe(undefined);
+    expect(card(dom).textContent).toContain("2026年8月");
+    expect(qa(dom, ".mh").map((el) => el.textContent)).toEqual(["月", "火", "水", "木", "金", "土", "日"]);
+    expect(qa(dom, ".mcell").length).toBe(36); // 空き5 + 31日
+    expect(qa(dom, ".mcell .dot").length).toBe(31);
+  });
+
+  // 制約2: 欠損は未入力であって未達ではない。週タブと同じ語彙で区別する
+  it("未入力・未達・達成・未来を区別する", () => {
+    const dom = open(seed({ "2026-08-14": { gym: true }, "2026-08-15": { gym: false } }));
+    pick(dom, "gym");
+    const dots = qa(dom, ".mcell .dot").map((el) => el.className);
+    expect(dots[13]).toContain("ok");    // 8/14 達成
+    expect(dots[14]).toContain("ng");    // 8/15 未達
+    expect(dots[12]).toContain("miss");  // 8/13 未入力
+    expect(dots[16]).toContain("fut");   // 8/17 未来
+  });
+
+  // 月ごとの目標は持たない。達成数と記録数を事実として並べるだけ
+  it("達成数と記録数を出し、未入力は記録数に数えない", () => {
+    const dom = open(seed({ "2026-08-14": { gym: true }, "2026-08-15": { gym: false } }));
+    pick(dom, "gym");
+    expect(card(dom).textContent).toContain("達成 1 / 記録 2");
+  });
+
+  it("今月より先へは進めず、記録より前の月へも戻れない", () => {
+    const dom = open(seed({ "2026-08-10": { gym: true } }));
+    expect(q(dom, '[data-mo="1"]').disabled).toBe(true);
+    expect(q(dom, '[data-mo="-1"]').disabled).toBe(true);
+  });
+
+  it("前の月に記録があれば戻れる", () => {
+    const dom = open(seed({ "2026-07-20": { gym: true }, "2026-08-10": { gym: true } }));
+    q(dom, '[data-mo="-1"]').click();
+    expect(card(dom).textContent).toContain("2026年7月");
+    expect(qa(dom, ".mcell .dot").length).toBe(31);
+    expect(q(dom, '[data-mo="1"]').disabled).toBe(false);
+  });
+
+  // 出所は週タブと同じ allItems + enabled。計測のみの項目は達成判定を持たないので出ない
+  it("達成判定を持たない項目はセレクタに出ず、非表示にした項目も消える", () => {
+    const dom = open();
+    const opts = () => [...q(dom, "[data-mon]").options].map((o) => o.value);
+    expect(opts()).toContain("gym");
+    ["mood", "wake", "sleepFeel"].forEach((id) => expect(opts()).not.toContain(id));
+    byText(dom, "button.tb", "設定").click();
+    q(dom, '[data-tog="gym"]').click();
+    byText(dom, "button.tb", "推移").click();
+    expect(opts()).not.toContain("gym");
+  });
+});
