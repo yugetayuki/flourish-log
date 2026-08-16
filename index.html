@@ -135,7 +135,7 @@ svg{display:block}
 <body>
 <div id="wrap">
   <header>
-    <div class="title"><h1>Aubade</h1><span class="eyebrow mono">DAWN&nbsp;LOG&nbsp;·&nbsp;v4.13</span></div>
+    <div class="title"><h1>Aubade</h1><span class="eyebrow mono">DAWN&nbsp;LOG&nbsp;·&nbsp;v4.14</span></div>
     <span id="saveState"></span>
   </header>
   <div id="banner"></div>
@@ -165,7 +165,10 @@ var WATER_ML    = minRange(0, 4000, 500);
 // 業務時間は分の実値。0 は休みの日で、これが入ることで平日/休日が曜日に頼らず読める
 var WORK_MIN    = minRange(0, 840, 30);     // 0〜14h
 // 仕事の重さは主観なので計測のみ(設計制約6)。眠れた感・気分と同じ扱い
-var LOAD_OPTS   = ["軽い","普通","重い"];
+// 「なし」は尺度の点ではなく「その日は仕事をしていない」。先頭に置いたのは並びが自然になるため
+// (末尾だと 軽い/普通/重い/なし となり、重いより右に無関係な段が来る)。
+// 先頭に足すと既存の値の意味がずれるので、schema 17 の migrate で +1 して読み替えている
+var LOAD_OPTS   = ["なし","軽い","普通","重い"];
 var STUDY_MIN   = minRange(0, 240, 15);     // 0〜4h
 // 24時を超えた就寝は 25:12 のように繰り上がりのまま出す(日をまたいだことが読めるように)
 function fmtHM(v){ return Math.floor(v/60) + ":" + pad(v%60); }
@@ -255,7 +258,7 @@ function md(s){ return (+s.slice(5,7))+"/"+(+s.slice(8,10)); }
 /* ================= データ ================= */
 function defaultData(){
   return {
-    version: 16,
+    version: 17,
     targets: {bedtimeMin:5, youtubeMin:5, ashwagandha:6, coffee:6, creatine:6, weight:5, gym:3, studyMin:5, sauna:2, bath:6, mouth:6, protein:6, stepsCount:5, waterMl:6, sober:4, meal:5, supp:6},
     // 分の実値。境界は v8 までの選択肢と同じに保つ(24:00以内 / 1h以内)。
     // 入力が15分刻みになっても達成ラインは粗いままにする — 15分単位で締め上げられる状態は
@@ -310,7 +313,7 @@ function migrate(d){
   // v14 の勉強(study→studyMin)は**あえて変換しない**。true は「15分以上」という下限で
   // 実測値ではなく、15 を書き込むと格子に乗って実測と見分けが付かなくなる。
   // 読み出し側(studyDone)が両方を見ることで解いている
-  o.version = 16;
+  o.version = 17;
   o.lastBackup = (d && typeof d.lastBackup === "string") ? d.lastBackup : null;
   o.targets = Object.assign({}, b.targets, isPlainObject(d && d.targets) ? d.targets : {});
   o.th = Object.assign({}, b.th, isPlainObject(d && d.th) ? d.th : {});
@@ -399,6 +402,20 @@ function migrate(d){
     var ren16 = isPlainObject(d && d.enabled) ? d.enabled : {};
     if (!("stepsCount" in ren16) && ("steps" in ren16)) o.enabled.stepsCount = o.enabled.steps;
     delete o.enabled.steps;
+  }
+  if (from < 17) {
+    // 仕事の重さに「なし」を先頭へ足した。既存の 軽い0/普通1/重い2 を 1/2/3 へずらす。
+    // 段数を変えるのは主観尺度では原則やらないが、これは細分化ではなく「尺度の外の段(該当なし)」の
+    // 追加で、疑似精度は増えない。踏み切れたのは台帳がまだ workLoad を1件も持っておらず
+    // (確認: 台帳の最新は 2026-08-09、workMin/workLoad の追加は 2026-08-17)、
+    // 遡及入力の窓(7日)の外なので旧スケールが台帳へ入る経路が構造的に無いため。v7 の歩数と同じ状況。
+    var shifted17 = {};
+    Object.keys(o.entries).forEach(function(k){
+      var e = o.entries[k];
+      if (!isPlainObject(e) || typeof e.workLoad !== "number") { shifted17[k] = e; return; }
+      shifted17[k] = Object.assign({}, e, {workLoad: e.workLoad + 1});
+    });
+    o.entries = shifted17;
   }
   return o;
 }
@@ -975,8 +992,9 @@ function viewLog(today){
     minSelect("stepsCount", STEPS_N, e.stepsCount!=null?e.stepsCount:null, fmtStepsOpt));
   if (en.workMin) y += row("業務時間","目標は持たない(計測のみ)",
     minSelect("workMin", WORK_MIN, e.workMin!=null?e.workMin:null, fmtDur));
+  // 「なし」は良し悪しの外にあるので評価色を付けない(軽い=pine / 重い=sienna はそのまま)
   if (en.workLoad) y += row("仕事の重さ","主観でOK(計測のみ)",
-    seg("workLoad", LOAD_OPTS, e.workLoad!=null?e.workLoad:null, ["on-pine","on-gray","on-sienna"]));
+    seg("workLoad", LOAD_OPTS, e.workLoad!=null?e.workLoad:null, ["on-gray","on-pine","on-gray","on-sienna"]));
   if (en.waterMl) y += row("水分","1日の合計",
     minSelect("waterMl", WATER_ML, e.waterMl!=null?e.waterMl:null, fmtMl));
   if (en.gym) y += row("ジム","", pairBtn("gym", e.gym!=null?e.gym:null));
@@ -1379,8 +1397,8 @@ function viewReview(today){
       {l:"勉強した × YouTube多め", ps:mk(function(e){return studyDone(S, e);}, function(e){return e.youtubeMin==null?null:e.youtubeMin>60;})},
       // 仕事は他の項目の上流にありうる。棚卸しで「ジムに行けない理由は仕事との摩擦」と出たので、
       // ここだけが「なぜそうなったか」に届く対になる
-      {l:"仕事が重い × 前日に酒を飲んだ", ps:mk(function(e){return e.workLoad==null?null:e.workLoad===2;}, function(e){return e.sober==null?null:e.sober===false;})},
-      {l:"仕事が重い × 就寝が達成ライン外", ps:mk(function(e){return e.workLoad==null?null:e.workLoad===2;}, function(e){return e.bedtimeMin==null?null:e.bedtimeMin>S.th.bedtimeMin;})},
+      {l:"仕事が重い × 前日に酒を飲んだ", ps:mk(function(e){return e.workLoad==null?null:e.workLoad===3;}, function(e){return e.sober==null?null:e.sober===false;})},
+      {l:"仕事が重い × 就寝が達成ライン外", ps:mk(function(e){return e.workLoad==null?null:e.workLoad===3;}, function(e){return e.bedtimeMin==null?null:e.bedtimeMin>S.th.bedtimeMin;})},
       {l:"業務時間が8h超 × ジムをした", ps:mk(function(e){return e.workMin==null?null:e.workMin>480;}, function(e){return e.gym==null?null:e.gym===true;})},
       // 休肝日・サウナ・歩数はいずれも前日を指すので、当朝の眠れた感とは同じ一夜を挟んで並ぶ
       {l:"前日に酒を飲んだ × 眠れた感「良」", ps:mk(function(e){return e.sober==null?null:e.sober===false;}, function(e){return e.sleepFeel==null?null:e.sleepFeel===0;})},
@@ -1545,7 +1563,7 @@ function viewSettings(){
   h += '</div></div>';
 
   h += '<p class="foot">データはこの端末のブラウザ(このアプリ)内にのみ保存されます。バックアップはJSONコピーで。'
-    + 'このアプリの役割は計測と週次フィードバックまで — 行動を変えるのは環境設計の仕事です。 v4.13</p>';
+    + 'このアプリの役割は計測と週次フィードバックまで — 行動を変えるのは環境設計の仕事です。 v4.14</p>';
   return h;
 }
 
@@ -1791,6 +1809,11 @@ document.addEventListener("change", function(ev){
   if (ms) {
     var mf = ms.dataset.f, me = Object.assign({}, S.entries[sel] || {});
     if (t.value === "") delete me[mf]; else me[mf] = +t.value;
+    // 業務時間 0 = その日は仕事をしていない。重さは「なし」で確定するので、もう1タップ求めない。
+    // **空欄のときだけ埋める。** 無条件に入れると、本人が「重い」を選んだあとに業務時間を 0 へ
+    // 訂正しただけで、入れた値が黙って置き換わる。保存値からは本人の入力かアプリが入れたかを
+    // 区別できず、台帳にもそのまま出る(study→studyMin で変換を拒否したのと同じ理由)
+    if (mf === "workMin" && me.workMin === 0 && me.workLoad == null) me.workLoad = LOAD_OPTS.indexOf("なし");
     if (Object.keys(me).length === 0) delete S.entries[sel];
     else S.entries[sel] = me;
     save(); render(); return;
