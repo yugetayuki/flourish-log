@@ -132,7 +132,7 @@ svg{display:block}
 <body>
 <div id="wrap">
   <header>
-    <div class="title"><h1>Aubade</h1><span class="eyebrow mono">DAWN&nbsp;LOG&nbsp;·&nbsp;v4.1</span></div>
+    <div class="title"><h1>Aubade</h1><span class="eyebrow mono">DAWN&nbsp;LOG&nbsp;·&nbsp;v4.2</span></div>
     <span id="saveState"></span>
   </header>
   <div id="banner"></div>
@@ -169,6 +169,10 @@ function wakeOpacity(v){
 var SLEEP_OPTS   = ["良","普通","悪"];
 // 気分は主観状態で直接コントロールできないので、眠れた感と同じく計測のみ(設計制約6)
 var MOOD_OPTS    = ["高","中","低"];
+// 誰と過ごしたか。幸福への寄与が大きい変数だが、どの相手が「良い」わけでもないので順序を持たない。
+// 相手の名前も人数も持たない(持つと他人の情報になり、台帳へ出せなくなる)。
+// インデックスで保存するので、後から選択肢の順番や意味を変えないこと(過去の記録の意味が黙って変わる)
+var COMPANION_OPTS = ["ひとり","家族","友人","仕事"];
 // 推移タブのY軸目盛りにも使い回すので、左余白(44px)に収まる短さにしてある
 var STEP_OPTS    = ["3千以下","5千","8千","1万以上"];
 // 食べた/飲んだその場で1タップする項目。3回ぶんは entries に個別に持ち、達成は日単位へ畳む。
@@ -231,13 +235,13 @@ function md(s){ return (+s.slice(5,7))+"/"+(+s.slice(8,10)); }
 /* ================= データ ================= */
 function defaultData(){
   return {
-    version: 10,
+    version: 11,
     targets: {bedtimeMin:5, youtubeMin:5, ashwagandha:6, coffee:6, creatine:6, weight:5, gym:3, study:5, sauna:2, bath:6, mouth:6, protein:6, steps:5, sober:4, meal:5, supp:6},
     // 分の実値。境界は v8 までの選択肢と同じに保つ(24:00以内 / 1h以内)。
     // 入力が15分刻みになっても達成ラインは粗いままにする — 15分単位で締め上げられる状態は
     // 完璧主義に対する逆向きのラチェットになるため(設計制約1の趣旨)
     th: {bedtimeMin:1440, youtubeMin:60, steps:2},
-    enabled: {bedtimeMin:true, wakeMin:true, sleepFeel:true, youtubeMin:true, ashwagandha:true, coffee:true, creatine:true, weight:true, gym:true, study:true, sauna:true, bath:true, mouth:true, protein:true, steps:true, sober:true, meal:true, supp:true, mood:true},
+    enabled: {bedtimeMin:true, wakeMin:true, sleepFeel:true, youtubeMin:true, ashwagandha:true, coffee:true, creatine:true, weight:true, gym:true, study:true, sauna:true, bath:true, mouth:true, protein:true, steps:true, sober:true, companion:true, meal:true, supp:true, mood:true},
     custom: [],
     entries: {},
     lastBackup: null,
@@ -279,10 +283,11 @@ function migrate(d){
   var from = Number(isPlainObject(d) ? d.version : 0);
   if (!isFinite(from)) from = 0;
   // v3 で lastBackup、v4 で起床時刻(wake)と朝コーヒー(coffee)、v5 でサウナ・歩数・休肝日・食事の節制、
-  // v6 で整腸剤・サプリ、v7 でタンパク質、v8 で気分、v10 でお風呂・肌ケアとマウスケアを追加。
+  // v6 で整腸剤・サプリ、v7 でタンパク質、v8 で気分、v10 でお風呂・肌ケアとマウスケア、
+  // v11 で「誰と過ごしたか」を追加。
   // 追加した項目はいずれも欠損が既定値で埋まるので値の変換は要らない。
   // 値の変換が要るのは2つだけ: v7 の歩数4段階化と、v9 の就寝・起床・YouTube の分値化
-  o.version = 10;
+  o.version = 11;
   o.lastBackup = (d && typeof d.lastBackup === "string") ? d.lastBackup : null;
   o.targets = Object.assign({}, b.targets, isPlainObject(d && d.targets) ? d.targets : {});
   o.th = Object.assign({}, b.th, isPlainObject(d && d.th) ? d.th : {});
@@ -418,6 +423,7 @@ function weekStats(data, ws, today){
   return {range: md(days[0])+"–"+md(days[6]), logged:logged, items:per,
     bedtimeMin:vals("bedtimeMin"), wakeMin:vals("wakeMin"), youtubeMin:vals("youtubeMin"),
     sleepFeel:dist("sleepFeel",SLEEP_OPTS.length), steps:dist("steps",STEP_OPTS.length),
+    companion:dist("companion",COMPANION_OPTS.length),
     mood:MOOD.parts.map(function(p){ return dist(p.id, MOOD_OPTS.length); })};
 }
 // カスタム項目のラベルは自由入力なので、カンマ/引用符/改行で列がずれないよう RFC4180 で囲う
@@ -426,7 +432,7 @@ function csvCell(v){
   return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g,'""') + '"' : s;
 }
 function buildCSV(data){
-  var cols=["date","就寝時刻(分)","起床時刻(分)","眠れた感","YouTube(分)","アシュワガンダ","朝コーヒー","クレアチン","体重測定","体重","ジム","勉強","サウナ","お風呂・肌ケア","マウスケア","タンパク質","歩数","休肝日"]
+  var cols=["date","就寝時刻(分)","起床時刻(分)","眠れた感","YouTube(分)","アシュワガンダ","朝コーヒー","クレアチン","体重測定","体重","ジム","勉強","サウナ","お風呂・肌ケア","マウスケア","タンパク質","歩数","休肝日","誰と"]
     .concat(perDayParts().map(function(p){return p.label;}))
     .concat(MOOD.parts.map(function(p){return p.label+"の気分";}))
     .concat(data.custom.map(function(c){return c.label;}));
@@ -441,7 +447,8 @@ function buildCSV(data){
       e.sleepFeel!=null?SLEEP_OPTS[e.sleepFeel]:"",
       e.youtubeMin!=null?e.youtubeMin:"",
       b(e.ashwagandha), b(e.coffee), b(e.creatine), b(e.weight), e.weightVal!=null?e.weightVal:"", b(e.gym), b(e.study),
-      b(e.sauna), b(e.bath), b(e.mouth), b(e.protein), e.steps!=null?STEP_OPTS[e.steps]:"", b(e.sober)]
+      b(e.sauna), b(e.bath), b(e.mouth), b(e.protein), e.steps!=null?STEP_OPTS[e.steps]:"", b(e.sober),
+      e.companion!=null?COMPANION_OPTS[e.companion]:""]
       .concat(perDayParts().map(function(p){return b(e[p.id]);}))
       .concat(MOOD.parts.map(function(p){return e[p.id]!=null?MOOD_OPTS[e[p.id]]:"";}))
       .concat(data.custom.map(function(c){return b(e[c.id]);}));
@@ -455,7 +462,8 @@ function buildReviewText(data, today){
   var p = weekStats(data, addDays(ws,-7), today);
   return "【Aubade 週報データ " + s.range + "】\n"
     + "以下のデータで週次レビューを書いてください。形式: 【事実】3行以内 / 【解釈】2行以内(推測と明示) / 【来週の一点】1つだけ具体的に。責めない・説教しない・淡々と。環境設計(摩擦の調整)の観点で提案。\n"
-    + "凡例: sleepFeel=["+SLEEP_OPTS.join(",")+"] steps=["+STEP_OPTS.join(",")+"] mood=["+MOOD_OPTS.join(",")+"]\n"
+    + "凡例: sleepFeel=["+SLEEP_OPTS.join(",")+"] steps=["+STEP_OPTS.join(",")+"] mood=["+MOOD_OPTS.join(",")+"]"
+    + " companion=["+COMPANION_OPTS.join(",")+"]\n"
     + "bedtimeMin / wakeMin / youtubeMin は分の実値を昇順に並べたものです"
     + "(就寝は 24:00=1440 で、24時を超えた日は1440超。YouTube は視聴した分数)。\n"
     + "mood は["+MOOD.parts.map(function(p){return p.label;}).join(",")+"]の3枠ぶんの分布で、各枠が上の凡例の並びです。"
@@ -464,6 +472,9 @@ function buildReviewText(data, today){
     + "「アシュワガンダを飲んだ日の翌朝の気分」のような日単位の突き合わせはこのデータからはできないので、"
     + "推測で書かないでください(日単位の相関はアプリ側の相関ヒントが受け持ちます)。\n"
     + "wakeMin(起床時刻)は計測のみで、達成判定の対象ではありません。\n"
+    + "companion(誰と過ごしたか)も計測のみで、順序も良し悪しもありません。"
+    + "「ひとりが多い週は良くない」のような価値づけをせず、分布の事実として扱ってください。"
+    + "相手の人数や名前は記録していません。\n"
     + "休肝日は酒を飲まなかった日として数えています。タンパク質は前日に規定量以上とれた日として数えています。"
     + "食事の節制と整腸剤・サプリは1日3回ぶんを記録し、"
     + "記録した回がすべて達成なら1日ぶんの達成です(記録しなかった回は数えません)。\n"
@@ -745,6 +756,7 @@ function viewLog(today){
   if (en.protein) fields.push(e.protein!=null);
   if (en.steps) fields.push(e.steps!=null);
   if (en.sober) fields.push(e.sober!=null);
+  if (en.companion) fields.push(e.companion!=null);
   PERDAY.forEach(function(g){ if (en[g.id]) g.parts.forEach(function(p){ fields.push(e[p.id]!=null); }); });
   if (en.mood) MOOD.parts.forEach(function(p){ fields.push(e[p.id]!=null); });
   S.custom.forEach(function(c){ fields.push(e[c.id]!=null); });
@@ -800,6 +812,11 @@ function viewLog(today){
   if (en.study) y += row("勉強","15分以上で達成", pairBtn("study", e.study!=null?e.study:null));
   if (en.sober) y += row("休肝日","前日に酒を飲んだか",
     pairBtn("sober", e.sober!=null?e.sober:null, {t:"✓ 飲まなかった", f:"✗ 飲んだ"}));
+  // 達成判定を持たない(制約6と同じ趣旨。誰と過ごすかは主観でも達成でもない)ので、
+  // 評価色 pine / sienna を使わず全段を同色にする。色で「家族の方が良い」と言わせない
+  if (en.companion) y += row("誰と","いちばん長く一緒にいた相手",
+    seg("companion", COMPANION_OPTS, e.companion!=null?e.companion:null,
+        ["on-gray","on-gray","on-gray","on-gray"]));
   S.custom.forEach(function(c){ y += row(c.label,"", pairBtn(c.id, e[c.id]!=null?e[c.id]:null)); });
   h += '<div class="card"><div class="chead"><span class="ctitle">昨日</span></div>'+y+'</div>';
 
@@ -1221,7 +1238,7 @@ function viewSettings(){
   h += '</select></div></div>';
 
   h += '<div class="card"><div class="chead"><span class="ctitle">表示する項目</span></div>';
-  var togs=[["bedtimeMin","就寝時刻"],["wakeMin","起床時刻"],["sleepFeel","眠れた感"],["youtubeMin","YouTube"],["ashwagandha","アシュワガンダ"],["coffee","朝コーヒー"],["creatine","クレアチン"],["weight","体重測定"],["gym","ジム"],["study","勉強"],["sauna","サウナ"],["bath","お風呂・肌ケア"],["mouth","マウスケア"],["protein","タンパク質"],["steps","歩数"],["sober","休肝日"]]
+  var togs=[["bedtimeMin","就寝時刻"],["wakeMin","起床時刻"],["sleepFeel","眠れた感"],["youtubeMin","YouTube"],["ashwagandha","アシュワガンダ"],["coffee","朝コーヒー"],["creatine","クレアチン"],["weight","体重測定"],["gym","ジム"],["study","勉強"],["sauna","サウナ"],["bath","お風呂・肌ケア"],["mouth","マウスケア"],["protein","タンパク質"],["steps","歩数"],["sober","休肝日"],["companion","誰と"]]
     .concat(PERDAY.map(function(g){ return [g.id, g.label]; }))
     .concat([[MOOD.id, MOOD.label]]);
   togs.forEach(function(t){
@@ -1288,7 +1305,7 @@ function viewSettings(){
   h += '</div></div>';
 
   h += '<p class="foot">データはこの端末のブラウザ(このアプリ)内にのみ保存されます。バックアップはJSONコピーで。'
-    + 'このアプリの役割は計測と週次フィードバックまで — 行動を変えるのは環境設計の仕事です。 v4.1</p>';
+    + 'このアプリの役割は計測と週次フィードバックまで — 行動を変えるのは環境設計の仕事です。 v4.2</p>';
   return h;
 }
 
@@ -1509,6 +1526,7 @@ window.__flourish = {
   syncPush: syncPush, scheduleSync: scheduleSync, syncUrlOk: syncUrlOk,
   // 項目一覧と段階の刻みはここが真実の出所。テスト側で書き写すと、増やしたときに書き写しだけが腐る
   CORE: CORE, PERDAY: PERDAY, STEP_OPTS: STEP_OPTS, MOOD: MOOD, MOOD_OPTS: MOOD_OPTS,
+  COMPANION_OPTS: COMPANION_OPTS,
   BEDTIME_MIN: BEDTIME_MIN, WAKE_MIN: WAKE_MIN, YT_MIN: YT_MIN, fmtHM: fmtHM, fmtDur: fmtDur,
 };
 
