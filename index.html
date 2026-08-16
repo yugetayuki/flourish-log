@@ -135,7 +135,7 @@ svg{display:block}
 <body>
 <div id="wrap">
   <header>
-    <div class="title"><h1>Aubade</h1><span class="eyebrow mono">DAWN&nbsp;LOG&nbsp;·&nbsp;v4.9</span></div>
+    <div class="title"><h1>Aubade</h1><span class="eyebrow mono">DAWN&nbsp;LOG&nbsp;·&nbsp;v4.10</span></div>
     <span id="saveState"></span>
   </header>
   <div id="banner"></div>
@@ -712,9 +712,42 @@ function persistTimer(){
 }
 /** 開始した日の勉強は翌日ぶんのエントリに入る(studyMin は前日を指すため) */
 function timerTarget(day){ return fmt(addDays(parseD(day), 1)); }
+function timerElapsedSec(){
+  if (!timerState) return 0;
+  return Math.max(0, Math.floor((Date.now() - timerState.startedAt) / 1000));
+}
+// 記録する分。秒は四捨五入する(切り捨てると 59秒の勉強が 0 分になる)
 function timerElapsedMin(){
   if (!timerState) return 0;
   return Math.max(0, Math.round((Date.now() - timerState.startedAt) / 60000));
+}
+/** 走行中の表示。ストップウォッチなので秒まで出す(記録値の fmtDur とは別) */
+function fmtClock(sec){
+  var h = Math.floor(sec/3600), m = Math.floor(sec%3600/60), s = sec%60;
+  return (h > 0 ? h + ":" + pad(m) : String(m)) + ":" + pad(s);
+}
+
+/* 経過表示の更新。
+ *
+ * **数えるのではなく、毎回 startedAt から引き直す。** interval を計数に使うと
+ * バックグラウンドで止まった時間がそのまま欠測になるが、引き直すだけなら
+ * 止まっていた間も復帰後の最初の tick で正しい値に戻る。
+ * 更新は経過の桁だけを書き換える。render() を毎秒呼ぶと innerHTML を丸ごと差し替えることになり、
+ * select を開いている最中に閉じるなどの実害が出る。
+ */
+var timerTick = null;
+function timerPaint(){
+  var el = document.getElementById("timerElapsed");
+  if (el) el.textContent = fmtClock(timerElapsedSec());
+}
+function timerTickStart(){
+  timerTickStop();
+  if (!timerState) return;
+  timerPaint();
+  timerTick = setInterval(timerPaint, 1000);
+}
+function timerTickStop(){
+  if (timerTick !== null) { clearInterval(timerTick); timerTick = null; }
 }
 // CSP が https://*.ts.net しか許さないので、それ以外を入れても送信は黙って失敗する。
 // 違反はコンソールにしか出ず画面からは理由が分からないため、入口で弾いて理由を見せる
@@ -968,9 +1001,9 @@ function viewTimer(today){
   var acc = (S.entries[tgt] || {}).studyMin;
   var h = '<div class="card"><div class="chead"><span class="ctitle">勉強タイマー</span></div>';
   if (timerState) {
-    // 経過は描画時点の値で秒刻みには動かない。止めた瞬間に「今 − 開始」で出し直すので記録はずれない
-    h += '<div class="mono" style="font-size:32px;text-align:center;padding:16px 0">'
-      + esc(fmtDur(timerElapsedMin())) + '</div>'
+    // 中身は timerPaint() が毎秒書き換える。ここでは初期値だけ入れる
+    h += '<div class="mono" id="timerElapsed" style="font-size:34px;text-align:center;padding:16px 0;'
+      + 'font-variant-numeric:tabular-nums">' + esc(fmtClock(timerElapsedSec())) + '</div>'
       + '<button class="sb on on-pine" data-action="timerStop" style="width:100%;padding:12px">■ 停止して記録</button>';
   } else {
     h += '<button class="sb on on-pine" data-action="timerStart" style="width:100%;padding:12px">▶ 開始</button>';
@@ -1457,7 +1490,7 @@ function viewSettings(){
   h += '</div></div>';
 
   h += '<p class="foot">データはこの端末のブラウザ(このアプリ)内にのみ保存されます。バックアップはJSONコピーで。'
-    + 'このアプリの役割は計測と週次フィードバックまで — 行動を変えるのは環境設計の仕事です。 v4.9</p>';
+    + 'このアプリの役割は計測と週次フィードバックまで — 行動を変えるのは環境設計の仕事です。 v4.10</p>';
   return h;
 }
 
@@ -1475,6 +1508,9 @@ function render(){
   document.getElementById("banner").innerHTML =
     loadError ? '<div class="banner err">'+esc(loadError)+'</div>' : "";
   document.getElementById("view").innerHTML = v;
+  // 経過の器は今の innerHTML と一緒に作り直されるので、参照を持ち直す。
+  // タイマータブ以外では止める(見えない要素を毎秒書き換えても意味がない)
+  if (tab === "timer" && timerState) timerTickStart(); else timerTickStop();
   document.getElementById("nav").innerHTML = TABS.map(function(t){
     return '<button class="tb'+(tab===t[0]?' on':'')+'" data-nav="'+t[0]+'">'+t[1]+'</button>';
   }).join("");
@@ -1497,6 +1533,11 @@ document.addEventListener("visibilitychange", function(){
 });
 document.addEventListener("visibilitychange", function(){
   if (document.visibilityState === "visible") syncToday();
+});
+// 復帰した瞬間に引き直す。interval はバックグラウンドで止まる/間引かれるので、
+// これが無いと最初の tick が来るまで戻る前の数字が残って見える
+document.addEventListener("visibilitychange", function(){
+  if (document.visibilityState === "visible") timerPaint();
 });
 window.addEventListener("focus", syncToday);
 
@@ -1721,6 +1762,8 @@ window.__flourish = {
   STUDY_MIN: STUDY_MIN, studyDone: studyDone,
   TIMER_KEY: TIMER_KEY, TIMER_MAX_MIN: TIMER_MAX_MIN,
   getTimer: function(){ return timerState; },
+  fmtClock: fmtClock, timerPaint: timerPaint,
+  timerTicking: function(){ return timerTick !== null; },
   fmtHM: fmtHM, fmtDur: fmtDur, fmtMl: fmtMl,
 };
 

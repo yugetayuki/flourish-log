@@ -177,8 +177,14 @@ await page.evaluate(() => {
 });
 await page.reload();
 await page.getByRole("button", { name: "タイマー" }).click();
-const elapsedShown = await page.textContent("#view");
-check("閉じて開き直しても経過が続く", elapsedShown.includes("25分"), elapsedShown.match(/\d+分/)?.[0]);
+const elapsedShown = await page.textContent("#timerElapsed");
+check("閉じて開き直しても経過が続く", elapsedShown === "25:00", elapsedShown);
+
+// 毎秒の更新。数えているのではなく startedAt から引き直していることを実ブラウザで見る
+const t0 = await page.textContent("#timerElapsed");
+await page.waitForTimeout(2100);
+const t1 = await page.textContent("#timerElapsed");
+check("経過表示が毎秒進む", t0 !== t1, t0 + " → " + t1);
 
 // 達成ライン th.studyMin が常にあるので、ブロブ全体ではなく entries だけを見る
 const beforeStop = await page.evaluate(() => {
