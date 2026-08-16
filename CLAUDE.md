@@ -3,7 +3,7 @@
 個人用の朝の行動計測PWA。オーナーの幸福(flourishing)フレームワーク実装の一部として、
 Claude.ai チャット上で要件定義〜v2.0まで開発された。本書は Claude Code への引き継ぎ資料。
 
-- 最終更新: 2026-08-16 / 現行バージョン: **v4.3**(`index.html` 内 eyebrow 表記と一致させること)
+- 最終更新: 2026-08-16 / 現行バージョン: **v4.4**(`index.html` 内 eyebrow 表記と一致させること)
 - テスト: `npm install && npm test`(vitest) と `npm run smoke`(実ブラウザ)。
   本数は `pwa.test.js` と `tools/smoke.mjs` が正なのでここには書かない
 
@@ -48,7 +48,7 @@ Claude.ai チャット上で要件定義〜v2.0まで開発された。本書は
 
 ---
 
-## 2. 現状(v4.3)
+## 2. 現状(v4.4)
 
 - **形態**: 依存ゼロのPWA。出荷物は `index.html` と `sw.js` の2本だけ。
   vanilla JS + インラインCSS + インラインSVGチャート。フレームワーク・CDN・ビルド工程なし
