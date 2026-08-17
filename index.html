@@ -135,7 +135,7 @@ svg{display:block}
 <body>
 <div id="wrap">
   <header>
-    <div class="title"><h1>Aubade</h1><span class="eyebrow mono">DAWN&nbsp;LOG&nbsp;·&nbsp;v4.15</span></div>
+    <div class="title"><h1>Aubade</h1><span class="eyebrow mono">DAWN&nbsp;LOG&nbsp;·&nbsp;v4.16</span></div>
     <span id="saveState"></span>
   </header>
   <div id="banner"></div>
@@ -257,13 +257,13 @@ function md(s){ return (+s.slice(5,7))+"/"+(+s.slice(8,10)); }
 /* ================= データ ================= */
 function defaultData(){
   return {
-    version: 18,
+    version: 19,
     targets: {bedtimeMin:5, youtubeMin:5, ashwagandha:6, coffee:6, creatine:6, weight:5, gym:3, studyMin:5, sauna:2, bath:6, mouth:6, protein:6, stepsCount:5, sober:4, meal:5, supp:6},
     // 分の実値。境界は v8 までの選択肢と同じに保つ(24:00以内 / 1h以内)。
     // 入力が15分刻みになっても達成ラインは粗いままにする — 15分単位で締め上げられる状態は
     // 完璧主義に対する逆向きのラチェットになるため(設計制約1の趣旨)
     th: {bedtimeMin:1440, youtubeMin:60, stepsCount:8000, studyMin:15},
-    enabled: {bedtimeMin:true, wakeMin:true, sleepFeel:true, youtubeMin:true, ashwagandha:true, coffee:true, creatine:true, weight:true, gym:true, studyMin:true, sauna:true, bath:true, mouth:true, protein:true, stepsCount:true, waterMl:true, sober:true, companion:true, workMin:true, workLoad:true, meal:true, supp:true, mood:true},
+    enabled: {bedtimeMin:true, wakeMin:true, sleepFeel:true, youtubeMin:true, ashwagandha:true, coffee:true, creatine:true, weight:true, gym:true, studyMin:true, sauna:true, bath:true, mouth:true, protein:true, stepsCount:true, waterMl:true, sober:true, eatout:true, companion:true, workMin:true, workLoad:true, meal:true, supp:true, mood:true},
     custom: [],
     entries: {},
     lastBackup: null,
@@ -561,7 +561,7 @@ function csvCell(v){
   return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g,'""') + '"' : s;
 }
 function buildCSV(data){
-  var cols=["date","就寝時刻(分)","起床時刻(分)","眠れた感","YouTube(分)","アシュワガンダ","朝コーヒー","クレアチン","体重測定","体重","ジム","勉強(旧・真偽)","勉強(分)","サウナ","お風呂・肌ケア","マウスケア","タンパク質","歩数(歩)","水分(ml)","業務時間(分)","仕事の重さ","休肝日","誰と","ひとこと"]
+  var cols=["date","就寝時刻(分)","起床時刻(分)","眠れた感","YouTube(分)","アシュワガンダ","朝コーヒー","クレアチン","体重測定","体重","ジム","勉強(旧・真偽)","勉強(分)","サウナ","お風呂・肌ケア","マウスケア","タンパク質","歩数(歩)","水分(ml)","業務時間(分)","仕事の重さ","休肝日","外食","誰と","ひとこと"]
     .concat(perDayParts().map(function(p){return p.label;}))
     .concat(MOOD.parts.map(function(p){return p.label+"の気分";}))
     .concat(data.custom.map(function(c){return c.label;}));
@@ -579,6 +579,7 @@ function buildCSV(data){
       // 旧列を残すのは v4.7 より前の日の記録が読めなくなるため。新しい日は右の列にだけ入る
       b(e.study), e.studyMin!=null?e.studyMin:"",
       b(e.sauna), b(e.bath), b(e.mouth), b(e.protein), e.stepsCount!=null?e.stepsCount:"", e.waterMl!=null?e.waterMl:"", e.workMin!=null?e.workMin:"", e.workLoad!=null?LOAD_OPTS[e.workLoad]:"", b(e.sober),
+      b(e.eatout),
       e.companion!=null?COMPANION_OPTS[e.companion]:"",
       // 自由入力なのでカンマ・引用符・改行を含みうる。csvCell が RFC4180 で囲う
       e.memo!=null?e.memo:""]
@@ -929,11 +930,16 @@ function seg(f, opts, val, colors){
 }
 // 休肝日のように「した/しなかった」では意味が通らない項目があるので、ラベルだけ差し替えられるようにする。
 // 達成側(✓)は常に data-v="t" なので、色と達成判定の向きは項目によらず一定に保てる
-function pairBtn(f, val, lab){
+// opts.neutral: 両側とも灰色にする。達成判定を持たない項目で使う。
+// 既定の pine/gray は「✓ が良い」を色で言うので、良し悪しの無い事実
+// (外食したか等)に付けると画面が価値判断をしてしまう。companion が seg で
+// on-gray を並べているのと同じ趣旨(制約6「計測のみ」の系)
+function pairBtn(f, val, lab, opts){
   lab = lab || {};
+  var neutral = !!(opts && opts.neutral);
   function b(v, text){
     var on = val === (v==="t");
-    var cls = v==="t" ? "on-pine" : "on-gray";
+    var cls = (v==="t" && !neutral) ? "on-pine" : "on-gray";
     return '<button class="sb'+(on?' on '+cls:'')+'" data-f="'+esc(f)+'" data-v="'+v+'" aria-pressed="'+on+'">'+text+'</button>';
   }
   return '<div class="seg" style="grid-template-columns:1fr 1fr">'
@@ -991,6 +997,7 @@ function viewLog(today){
   if (en.workMin) fields.push(e.workMin!=null);
   if (en.workLoad) fields.push(e.workLoad!=null);
   if (en.sober) fields.push(e.sober!=null);
+  if (en.eatout) fields.push(e.eatout!=null);
   if (en.companion) fields.push(e.companion!=null);
   PERDAY.forEach(function(g){ if (en[g.id]) g.parts.forEach(function(p){ fields.push(e[p.id]!=null); }); });
   if (en.mood) MOOD.parts.forEach(function(p){ fields.push(e[p.id]!=null); });
@@ -1052,6 +1059,10 @@ function viewLog(today){
     minSelect("studyMin", STUDY_MIN, e.studyMin!=null?e.studyMin:null, fmtDur));
   if (en.sober) y += row("休肝日","前日に酒を飲んだか",
     pairBtn("sober", e.sober!=null?e.sober:null, {t:"✓ 飲まなかった", f:"✗ 飲んだ"}));
+  // 外食も達成判定を持たない。外食は良し悪しではなく、節制(meal)とも独立している
+  // — 外食先でも節制はできる。中立色にするのは companion と同じ理由
+  if (en.eatout) y += row("外食","前日に外食したか",
+    pairBtn("eatout", e.eatout!=null?e.eatout:null, {t:"✓ した", f:"✗ していない"}, {neutral:true}));
   // 達成判定を持たない(制約6と同じ趣旨。誰と過ごすかは主観でも達成でもない)ので、
   // 評価色 pine / sienna を使わず全段を同色にする。色で「家族の方が良い」と言わせない
   if (en.companion) y += row("誰と","いちばん長く一緒にいた相手",
@@ -1455,6 +1466,9 @@ function viewReview(today){
       {l:"業務時間が8h超 × ジムをした", ps:mk(function(e){return e.workMin==null?null:e.workMin>480;}, function(e){return e.gym==null?null:e.gym===true;})},
       // 休肝日・サウナ・歩数はいずれも前日を指すので、当朝の眠れた感とは同じ一夜を挟んで並ぶ
       {l:"前日に酒を飲んだ × 眠れた感「良」", ps:mk(function(e){return e.sober==null?null:e.sober===false;}, function(e){return e.sleepFeel==null?null:e.sleepFeel===0;})},
+      // 外食も前日を指す。献立アプリ(hatchmenu)の履歴は日付を持たず突き合わせられないので、
+      // 「外食した日の夜がどうだったか」に届くのはこの2本だけ
+      {l:"前日に外食した × 眠れた感「良」", ps:mk(function(e){return e.eatout==null?null:e.eatout===true;}, function(e){return e.sleepFeel==null?null:e.sleepFeel===0;})},
       {l:"サウナに入った × 眠れた感「良」", ps:mk(function(e){return e.sauna==null?null:e.sauna===true;}, function(e){return e.sleepFeel==null?null:e.sleepFeel===0;})},
       {l:"歩数が達成ライン以上 × 眠れた感「良」", ps:mk(function(e){return e.stepsCount==null?null:e.stepsCount>=S.th.stepsCount;}, function(e){return e.sleepFeel==null?null:e.sleepFeel===0;})},
       // ここから気分。眠れた感と対になる組を選んであるので、
@@ -1464,6 +1478,7 @@ function viewReview(today){
       {l:"眠れた感「良」× 朝の気分「高」", ps:mk(function(e){return e.sleepFeel==null?null:e.sleepFeel===0;}, moodAM)},
       {l:"就寝が達成ライン内 × 朝の気分「高」", ps:mk(function(e){return e.bedtimeMin==null?null:e.bedtimeMin<=S.th.bedtimeMin;}, moodAM)},
       {l:"前日に酒を飲んだ × 朝の気分「高」", ps:mk(function(e){return e.sober==null?null:e.sober===false;}, moodAM)},
+      {l:"前日に外食した × 朝の気分「高」", ps:mk(function(e){return e.eatout==null?null:e.eatout===true;}, moodAM)},
       {l:"ジムをした × 朝の気分「高」", ps:mk(function(e){return e.gym==null?null:e.gym===true;}, moodAM)},
       {l:"歩数が達成ライン以上 × 朝の気分「高」", ps:mk(function(e){return e.stepsCount==null?null:e.stepsCount>=S.th.stepsCount;}, moodAM)},
       // 他項目との相関ではなく、朝のよさが夜まで保つかという日内の見方。
@@ -1544,7 +1559,7 @@ function viewSettings(){
   h += '</select></div></div>';
 
   h += '<div class="card"><div class="chead"><span class="ctitle">表示する項目</span></div>';
-  var togs=[["bedtimeMin","就寝時刻"],["wakeMin","起床時刻"],["sleepFeel","眠れた感"],["youtubeMin","YouTube"],["ashwagandha","アシュワガンダ"],["coffee","朝コーヒー"],["creatine","クレアチン"],["weight","体重測定"],["gym","ジム"],["studyMin","勉強"],["sauna","サウナ"],["bath","お風呂・肌ケア"],["mouth","マウスケア"],["protein","タンパク質"],["stepsCount","歩数"],["waterMl","水分"],["workMin","業務時間"],["workLoad","仕事の重さ"],["sober","休肝日"],["companion","誰と"]]
+  var togs=[["bedtimeMin","就寝時刻"],["wakeMin","起床時刻"],["sleepFeel","眠れた感"],["youtubeMin","YouTube"],["ashwagandha","アシュワガンダ"],["coffee","朝コーヒー"],["creatine","クレアチン"],["weight","体重測定"],["gym","ジム"],["studyMin","勉強"],["sauna","サウナ"],["bath","お風呂・肌ケア"],["mouth","マウスケア"],["protein","タンパク質"],["stepsCount","歩数"],["waterMl","水分"],["workMin","業務時間"],["workLoad","仕事の重さ"],["sober","休肝日"],["eatout","外食"],["companion","誰と"]]
     .concat(PERDAY.map(function(g){ return [g.id, g.label]; }))
     .concat([[MOOD.id, MOOD.label]]);
   togs.forEach(function(t){
@@ -1611,7 +1626,7 @@ function viewSettings(){
   h += '</div></div>';
 
   h += '<p class="foot">データはこの端末のブラウザ(このアプリ)内にのみ保存されます。バックアップはJSONコピーで。'
-    + 'このアプリの役割は計測と週次フィードバックまで — 行動を変えるのは環境設計の仕事です。 v4.15</p>';
+    + 'このアプリの役割は計測と週次フィードバックまで — 行動を変えるのは環境設計の仕事です。 v4.16</p>';
   return h;
 }
 

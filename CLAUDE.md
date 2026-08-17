@@ -3,7 +3,7 @@
 個人用の朝の行動計測PWA。オーナーの幸福(flourishing)フレームワーク実装の一部として、
 Claude.ai チャット上で要件定義〜v2.0まで開発された。本書は Claude Code への引き継ぎ資料。
 
-- 最終更新: 2026-08-17 / 現行バージョン: **v4.15**(`index.html` 内 eyebrow 表記と一致させること)
+- 最終更新: 2026-08-17 / 現行バージョン: **v4.16**(`index.html` 内 eyebrow 表記と一致させること)
 - テスト: `npm install && npm test`(vitest) と `npm run smoke`(実ブラウザ)。
   本数は `pwa.test.js` と `tools/smoke.mjs` が正なのでここには書かない
 
@@ -60,7 +60,7 @@ Claude.ai チャット上で要件定義〜v2.0まで開発された。本書は
 
 ---
 
-## 2. 現状(v4.15)
+## 2. 現状(v4.16)
 
 - **形態**: 依存ゼロのPWA。出荷物は `index.html` と `sw.js` の2本だけ。
   vanilla JS + インラインCSS + インラインSVGチャート。フレームワーク・CDN・ビルド工程なし
@@ -115,7 +115,7 @@ Claude.ai チャット上で要件定義〜v2.0まで開発された。本書は
   これが seg の同値タップに相当する。
 - 再描画で入力フォーカスが飛ぶため、自由入力は `change` イベント(blur/確定時)でのみ処理する方針。踏襲すること。
 
-### データモデル(localStorage `flourish-log-v2`、schema v18)
+### データモデル(localStorage `flourish-log-v2`、schema v19)
 
 形は `defaultData()` を読めば分かる。コードから読み取れない意味論だけを書く。
 
@@ -130,7 +130,7 @@ Claude.ai チャット上で要件定義〜v2.0まで開発された。本書は
   刻みを揃えたくなったらオーナーに相談すること。
 - **entriesの意味論(重要)**: キーの日付=「記録した朝」。フィールドが指す時点は
   前夜(bedtimeMin, ashwagandha)/ 当朝(wakeMin, sleepFeel, coffee, creatine, weight, weightVal)/
-  前日(youtubeMin, stepsCount, workMin, workLoad, gym, studyMin, sauna, bath, mouth, protein, steps, sober, companion, カスタム)/
+  前日(youtubeMin, stepsCount, workMin, workLoad, gym, studyMin, sauna, bath, mouth, protein, steps, sober, eatout, companion, カスタム)/
   **当日(`waterMl` と `PERDAY` の各 `parts` と `MOOD.parts`)**。
   **カスタム項目は必ず前日を指す**(「昨日」カードに描画される)。当朝・前夜の行動を足すときは `CORE` 側に置くこと。
 - **`PERDAY` の項目だけが当日を指す(v2.6 で食事、v2.7 で整腸剤・サプリ)。** 朝にまとめて入力する
@@ -218,6 +218,17 @@ Claude.ai チャット上で要件定義〜v2.0まで開発された。本書は
   - **「朝の気分「高」× 晩の気分「高」」だけは分母が自己選択される。** 朝の項目は同じ入力で
     一緒に埋まるが、晩の枠は別の機会にアプリを開かないと埋まらず、開くかどうか自体が調子と相関しうる。
     データからは取り除けないので、条件をラベルに出して読む側に見えるようにしてある。ラベルを短くしないこと。
+- **「外食」(`eatout`、schema 19、2026-08-17)も計測のみ。** 目標・達成ライン・達成判定を持たず、
+  `CORE` にも `targets` にも `th` にも入れない。指す時点は前日。
+  - **`meal`(食事の節制)とは独立。** `meal` の注記は「ジャンクフードと飲み会がなければ節制した」で
+    外食が暗黙に混ざっているが、**外食先でも節制はできる**ので別の事実として持つ。
+    片方から他方を導出しないこと。
+  - **評価色を付けない**(`pairBtn` の `{neutral:true}`)。外食は良し悪しではないため、
+    `companion` と同じ理由で全段を同色にする。**この中立化は opt-in で、既定の pine/gray は変えていない**
+    (`sober` は従来どおり ✓ が達成側の色で出る)。
+  - 目的は「外食した日の夜がどうだったか」を読むこと。献立アプリ(hatchmenu)の履歴は日付を持たず
+    Aubade と結合できないため、この項目が唯一の突き合わせ経路になる。
+    相関ヒントに「前日に外食した × 眠れた感「良」/ 朝の気分「高」」の2本を置いてある。
 - **「誰と過ごしたか」(`companion`、schema 11)も計測のみ。** 目標・達成ライン・達成判定を持たず、
   `CORE` にも `targets` にも `th` にも入れない(起床時刻・気分と同じ扱い)。指す時点は前日。
   - **順序尺度ではない。** ひとり/家族/友人/仕事のどれが「良い」わけでもないので、
