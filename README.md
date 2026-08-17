@@ -1,6 +1,6 @@
 # Aubade
 
-朝の行動を10〜20秒で記録し、週次で振り返るための個人用PWA。
+朝の行動を短時間で記録し、週次で振り返るための個人用PWA。
 依存ゼロの単一HTMLファイルで、記録は端末の `localStorage` にのみ残ります。
 
 **→ https://yugetayuki.github.io/flourish-log/**
