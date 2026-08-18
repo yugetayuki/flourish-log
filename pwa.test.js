@@ -1456,8 +1456,13 @@ describe("PWA v4.21: 昼寝(計測のみ)", () => {
     expect(html).toMatch(/前日に昼寝した × 眠れた感/);
     expect(html).toMatch(/前日に昼寝した × 朝の気分/);
     // 効果側に届く唯一の対。前日を指す napMin と当日を指す moodE は別の日付キーに入るので、
-    // mk では作れない(mkPrev が要る)。mk に戻すと n=0 になって行が静かに消える
+    // mk では作れない(mkPrev が要る)。**mk に戻しても行は消えない** — 同じエントリに
+    // 両方ある日が拾われ、1日ずれた対が黙って作られる(下のガードでは φ の符号が反転する)
     expect(html).toMatch(/前日に昼寝した × その日の晩の気分「高」\(晩も記録した日だけ\)", ps:mkPrev\(/);
+    // **mkPrev を使う対は1本だけ**に固定する。fa=前日を指す項目 / fb=当日を指す項目 という前提は
+    // シグネチャから読めずコメントにしかないので、2本目を足したときに必ずここで落として
+    // 時点の前提を読み直させる(このガードが無いと、2本目のずれは誰にも検出されない)
+    expect(html.match(/ps:mkPrev\(/g).length).toBe(1);
     expect(html).toMatch(/e\.napMin==null\?null:e\.napMin>0/);
     // 達成ラインを参照していたら、th.napMin を足した誰かが向きの逆な判定を持ち込んでいる
     expect(html).not.toMatch(/th\.napMin/);
@@ -1480,7 +1485,10 @@ describe("PWA v4.21: 昼寝(計測のみ)", () => {
     const view = q(dom, "#view").textContent;
     expect(view).toContain("前日に昼寝した × 眠れた感「良」");
     expect(view).toContain("前日に昼寝した × 朝の気分「高」");
-    expect(view).toContain("昼寝は疲れた日ほど記録されやすいので");
+    // 構造上の事実(測っていない)と、行動についての推測(交絡)は確かさが違うので分けて出す。
+    // 推測を断定形で書かない — 落とすと「効果があるかもしれない側」だけを弁護する一文になる
+    expect(view).toContain("日中の集中力・脳疲労は測っていません");
+    expect(view).toContain("疲れた日ほど昼寝しているなら");
     expect(view).toContain("関係が出なくても、効果が無いという意味ではありません");
   });
 
