@@ -135,7 +135,7 @@ svg{display:block}
 <body>
 <div id="wrap">
   <header>
-    <div class="title"><h1>Aubade</h1><span class="eyebrow mono">DAWN&nbsp;LOG&nbsp;·&nbsp;v4.17</span></div>
+    <div class="title"><h1>Aubade</h1><span class="eyebrow mono">DAWN&nbsp;LOG&nbsp;·&nbsp;v4.18</span></div>
     <span id="saveState"></span>
   </header>
   <div id="banner"></div>
@@ -173,6 +173,10 @@ var STUDY_MIN   = minRange(0, 240, 15);     // 0〜4h
 // 瞑想は5〜30分が実勢なので勉強(15分刻み)では粗すぎる。刻みを細かくしてよいのは物理量だけで、
 // 主観尺度(眠れた感・気分)の段数は変えない — 主観に外部の実値は無く、疑似精度だけが増えるため
 var MEDITATION_MIN = minRange(0, 120, 5);   // 0〜2h
+// ミニ昼寝の実勢は5〜20分だが、上を2hまで取るのは寝落ちした日が天井に張り付くと実際の長さが
+// 記録から消えるため(就寝の「24:30以降」と YouTube の「2h超」で実際に起きた。WATER_ML と同じ理屈)。
+// 瞑想と刻み・範囲が同じでも定数を分けてあるのは、両者が独立に動きうるため
+var NAP_MIN     = minRange(0, 120, 5);      // 0〜2h
 // 24時を超えた就寝は 25:12 のように繰り上がりのまま出す(日をまたいだことが読めるように)
 function fmtHM(v){ return Math.floor(v/60) + ":" + pad(v%60); }
 // YouTube は時刻ではなく時間量なので時計表記にしない。推移タブの左余白(44px)に収まる短さも要件
@@ -263,13 +267,15 @@ function md(s){ return (+s.slice(5,7))+"/"+(+s.slice(8,10)); }
 /* ================= データ ================= */
 function defaultData(){
   return {
-    version: 20,
+    version: 21,
     targets: {bedtimeMin:5, youtubeMin:5, ashwagandha:6, coffee:6, creatine:6, weight:5, gym:3, studyMin:5, meditationMin:5, sauna:2, bath:6, mouth:6, protein:6, stepsCount:5, sober:4, meal:5, supp:6},
     // 分の実値。境界は v8 までの選択肢と同じに保つ(24:00以内 / 1h以内)。
     // 入力が15分刻みになっても達成ラインは粗いままにする — 15分単位で締め上げられる状態は
     // 完璧主義に対する逆向きのラチェットになるため(設計制約1の趣旨)
     th: {bedtimeMin:1440, youtubeMin:60, stepsCount:8000, studyMin:15, meditationMin:10},
-    enabled: {bedtimeMin:true, wakeMin:true, sleepFeel:true, youtubeMin:true, ashwagandha:true, coffee:true, creatine:true, weight:true, gym:true, studyMin:true, meditationMin:true, sauna:true, bath:true, mouth:true, protein:true, stepsCount:true, waterMl:true, sober:true, eatout:true, companion:true, workMin:true, workLoad:true, meal:true, supp:true, mood:true},
+    // napMin(昼寝) は targets / th を持たない計測のみの項目。記録できる項目の一覧は
+    // CORE ではなくこの enabled が唯一の出所で、ガードテストもここから検査対象を導く
+    enabled: {bedtimeMin:true, wakeMin:true, sleepFeel:true, youtubeMin:true, ashwagandha:true, coffee:true, creatine:true, weight:true, gym:true, studyMin:true, meditationMin:true, napMin:true, sauna:true, bath:true, mouth:true, protein:true, stepsCount:true, waterMl:true, sober:true, eatout:true, companion:true, workMin:true, workLoad:true, meal:true, supp:true, mood:true},
     custom: [],
     entries: {},
     lastBackup: null,
@@ -312,7 +318,7 @@ function migrate(d){
   if (!isFinite(from)) from = 0;
   // v3 で lastBackup、v4 で起床時刻(wake)と朝コーヒー(coffee)、v5 でサウナ・歩数・休肝日・食事の節制、
   // v6 で整腸剤・サプリ、v7 でタンパク質、v8 で気分、v10 でお風呂・肌ケアとマウスケア、
-  // v11 で「誰と過ごしたか」、v12 でひとこと(memo)、v13 で水分を追加。
+  // v11 で「誰と過ごしたか」、v12 でひとこと(memo)、v13 で水分、v21 で昼寝(napMin)を追加。
   // 追加した項目はいずれも欠損が既定値で埋まるので値の変換は要らない。
   // 値の変換が要るのは下の from < N ブロックを持つものだけ(v7 の歩数4段階化、v9 の分値化、
   // v16 の歩数実値化、v17 の仕事の重さのずらし、v18 の水分の1日ずらし)。
@@ -579,7 +585,7 @@ function weekStats(data, ws, today){
   // 段数は選択肢配列から導く。書き写すと刻みを変えたとき最後の段が黙って集計から落ちる
   return {range: md(days[0])+"–"+md(days[6]), logged:logged, items:per,
     bedtimeMin:vals("bedtimeMin"), wakeMin:vals("wakeMin"), youtubeMin:vals("youtubeMin"),
-    waterMl:vals("waterMl"), studyMin:vals("studyMin"), meditationMin:vals("meditationMin"), workMin:vals("workMin"),
+    waterMl:vals("waterMl"), studyMin:vals("studyMin"), meditationMin:vals("meditationMin"), napMin:vals("napMin"), workMin:vals("workMin"),
     workLoad:dist("workLoad",LOAD_OPTS.length),
     sleepFeel:dist("sleepFeel",SLEEP_OPTS.length), stepsCount:vals("stepsCount"),
     companion:dist("companion",COMPANION_OPTS.length),
@@ -592,7 +598,7 @@ function csvCell(v){
   return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g,'""') + '"' : s;
 }
 function buildCSV(data){
-  var cols=["date","就寝時刻(分)","起床時刻(分)","眠れた感","YouTube(分)","アシュワガンダ","朝コーヒー","クレアチン","体重測定","体重","ジム","勉強(旧・真偽)","勉強(分)","瞑想(分)","サウナ","お風呂・肌ケア","マウスケア","タンパク質","歩数(歩)","水分(ml)","業務時間(分)","仕事の重さ","休肝日","外食","誰と","ひとこと"]
+  var cols=["date","就寝時刻(分)","起床時刻(分)","眠れた感","YouTube(分)","アシュワガンダ","朝コーヒー","クレアチン","体重測定","体重","ジム","勉強(旧・真偽)","勉強(分)","瞑想(分)","昼寝(分)","サウナ","お風呂・肌ケア","マウスケア","タンパク質","歩数(歩)","水分(ml)","業務時間(分)","仕事の重さ","休肝日","外食","誰と","ひとこと"]
     .concat(perDayParts().map(function(p){return p.label;}))
     .concat(MOOD.parts.map(function(p){return p.label+"の気分";}))
     .concat(data.custom.map(function(c){return c.label;}));
@@ -608,7 +614,7 @@ function buildCSV(data){
       e.youtubeMin!=null?e.youtubeMin:"",
       b(e.ashwagandha), b(e.coffee), b(e.creatine), b(e.weight), e.weightVal!=null?e.weightVal:"", b(e.gym),
       // 旧列を残すのは v4.7 より前の日の記録が読めなくなるため。新しい日は右の列にだけ入る
-      b(e.study), e.studyMin!=null?e.studyMin:"", e.meditationMin!=null?e.meditationMin:"",
+      b(e.study), e.studyMin!=null?e.studyMin:"", e.meditationMin!=null?e.meditationMin:"", e.napMin!=null?e.napMin:"",
       b(e.sauna), b(e.bath), b(e.mouth), b(e.protein), e.stepsCount!=null?e.stepsCount:"", e.waterMl!=null?e.waterMl:"", e.workMin!=null?e.workMin:"", e.workLoad!=null?LOAD_OPTS[e.workLoad]:"", b(e.sober),
       b(e.eatout),
       e.companion!=null?COMPANION_OPTS[e.companion]:"",
@@ -642,6 +648,13 @@ function buildReviewText(data, today){
     + "この一覧に入らないので、日数が少ない週は移行の途中である可能性を考慮してください。\n"
     + "meditationMin は瞑想した分の実値です(5分刻み)。schema 20 より前の日は記録が無いので、"
     + "この一覧に入らない日は未入力であって0分ではありません。\n"
+    // 昼寝は「多いほど良い」でも「少ないほど良い」でもなく、最適量が前夜の睡眠次第で変わる。
+    // 水分・体重と同じく、外部の基準(「昼寝は20分まで」)を持ち込ませない1文が要る
+    + "napMin は昼寝した分の実値です(5分刻み)。schema 21 より前の日は記録が無いので、"
+    + "この一覧に入らない日は未入力であって0分ではありません。"
+    + "目標を持たない計測のみで、多い少ないを評価しないでください。分布を事実として述べるのは構いませんが、"
+    + "「昼寝は◯分まで」「◯時以降は避けるべき」のような外部の基準を持ち込まないでください。"
+    + "瞑想とは別の項目です(夜の睡眠に対して逆向きに効きうるため分けてあります)。\n"
     + "bedtimeMin / wakeMin / youtubeMin は分の実値を昇順に並べたものです"
     + "(就寝は 24:00=1440 で、24時を超えた日は1440超。YouTube は視聴した分数)。\n"
     + "mood は["+MOOD.parts.map(function(p){return p.label;}).join(",")+"]の3枠ぶんの分布で、各枠が上の凡例の並びです。"
@@ -1051,6 +1064,7 @@ function viewLog(today){
   if (en.gym) fields.push(e.gym!=null);
   if (en.studyMin) fields.push(e.studyMin!=null || e.study!=null);
   if (en.meditationMin) fields.push(e.meditationMin!=null);
+  if (en.napMin) fields.push(e.napMin!=null);
   if (en.sauna) fields.push(e.sauna!=null);
   if (en.bath) fields.push(e.bath!=null);
   if (en.mouth) fields.push(e.mouth!=null);
@@ -1122,6 +1136,9 @@ function viewLog(today){
     minSelect("studyMin", STUDY_MIN, e.studyMin!=null?e.studyMin:null, fmtDur));
   if (en.meditationMin) y += row("瞑想","昨日の合計",
     minSelect("meditationMin", MEDITATION_MIN, e.meditationMin!=null?e.meditationMin:null, fmtDur));
+  // 達成ラインを持たない計測のみの項目なので、注記は「昨日の合計」だけにして達成の語を使わない
+  if (en.napMin) y += row("昼寝","昨日の合計",
+    minSelect("napMin", NAP_MIN, e.napMin!=null?e.napMin:null, fmtDur));
   if (en.sober) y += row("休肝日","前日に酒を飲んだか",
     pairBtn("sober", e.sober!=null?e.sober:null, {t:"✓ 飲まなかった", f:"✗ 飲んだ"}));
   // 外食も達成判定を持たない。外食は良し悪しではなく、節制(meal)とも独立している
@@ -1541,6 +1558,13 @@ function viewReview(today){
       // 達成ラインは可変なので th を直接見る(閾値を変えると過去の対の意味も変わるのは他項目と同じ)
       {l:"瞑想が達成ライン以上 × 眠れた感「良」", ps:mk(function(e){return e.meditationMin==null?null:e.meditationMin>=S.th.meditationMin;}, function(e){return e.sleepFeel==null?null:e.sleepFeel===0;})},
       {l:"瞑想が達成ライン以上 × 朝の気分「高」", ps:mk(function(e){return e.meditationMin==null?null:e.meditationMin>=S.th.meditationMin;}, function(e){return e.moodM==null?null:e.moodM===0;})},
+      // 昼寝は達成ラインを持たないので、二値化は「した/していない」。0分を選んだ日が「していない」で、
+      // 未入力(null)は mk が両方揃った日だけを拾うので分母に入らない。
+      // 対を眠れた感と朝の気分に置くのは瞑想と同じだが、期待する向きは逆でよい —
+      // 睡眠圧を下げるぶん夜に響きうるのが昼寝の主なコストで、アプリで測れるのはそこだけ
+      // (日中の集中力・脳疲労の項目は持たないため、効いているかは測れない)
+      {l:"前日に昼寝した × 眠れた感「良」", ps:mk(function(e){return e.napMin==null?null:e.napMin>0;}, function(e){return e.sleepFeel==null?null:e.sleepFeel===0;})},
+      {l:"前日に昼寝した × 朝の気分「高」", ps:mk(function(e){return e.napMin==null?null:e.napMin>0;}, moodAM)},
       // 仕事は他の項目の上流にありうる。棚卸しで「ジムに行けない理由は仕事との摩擦」と出たので、
       // ここだけが「なぜそうなったか」に届く対になる
       {l:"仕事が重い × 前日に酒を飲んだ", ps:mk(function(e){return e.workLoad==null?null:e.workLoad===3;}, function(e){return e.sober==null?null:e.sober===false;})},
@@ -1644,7 +1668,7 @@ function viewSettings(){
   h += '</select></div></div>';
 
   h += '<div class="card"><div class="chead"><span class="ctitle">表示する項目</span></div>';
-  var togs=[["bedtimeMin","就寝時刻"],["wakeMin","起床時刻"],["sleepFeel","眠れた感"],["youtubeMin","YouTube"],["ashwagandha","アシュワガンダ"],["coffee","朝コーヒー"],["creatine","クレアチン"],["weight","体重測定"],["gym","ジム"],["studyMin","勉強"],["meditationMin","瞑想"],["sauna","サウナ"],["bath","お風呂・肌ケア"],["mouth","マウスケア"],["protein","タンパク質"],["stepsCount","歩数"],["waterMl","水分"],["workMin","業務時間"],["workLoad","仕事の重さ"],["sober","休肝日"],["eatout","外食"],["companion","誰と"]]
+  var togs=[["bedtimeMin","就寝時刻"],["wakeMin","起床時刻"],["sleepFeel","眠れた感"],["youtubeMin","YouTube"],["ashwagandha","アシュワガンダ"],["coffee","朝コーヒー"],["creatine","クレアチン"],["weight","体重測定"],["gym","ジム"],["studyMin","勉強"],["meditationMin","瞑想"],["napMin","昼寝"],["sauna","サウナ"],["bath","お風呂・肌ケア"],["mouth","マウスケア"],["protein","タンパク質"],["stepsCount","歩数"],["waterMl","水分"],["workMin","業務時間"],["workLoad","仕事の重さ"],["sober","休肝日"],["eatout","外食"],["companion","誰と"]]
     .concat(PERDAY.map(function(g){ return [g.id, g.label]; }))
     .concat([[MOOD.id, MOOD.label]]);
   togs.forEach(function(t){
@@ -1711,7 +1735,7 @@ function viewSettings(){
   h += '</div></div>';
 
   h += '<p class="foot">データはこの端末のブラウザ(このアプリ)内にのみ保存されます。バックアップはJSONコピーで。'
-    + 'このアプリの役割は計測と週次フィードバックまで — 行動を変えるのは環境設計の仕事です。 v4.17</p>';
+    + 'このアプリの役割は計測と週次フィードバックまで — 行動を変えるのは環境設計の仕事です。 v4.18</p>';
   return h;
 }
 
@@ -1994,7 +2018,7 @@ window.__flourish = {
   BEDTIME_MIN: BEDTIME_MIN, WAKE_MIN: WAKE_MIN, YT_MIN: YT_MIN, WATER_ML: WATER_ML,
   WORK_MIN: WORK_MIN, LOAD_OPTS: LOAD_OPTS,
   STUDY_MIN: STUDY_MIN, studyDone: studyDone,
-  MEDITATION_MIN: MEDITATION_MIN,
+  MEDITATION_MIN: MEDITATION_MIN, NAP_MIN: NAP_MIN,
   TIMER_KEY: TIMER_KEY, TIMER_MAX_MIN: TIMER_MAX_MIN,
   getTimer: function(){ return timerState; },
   fmtClock: fmtClock, timerPaint: timerPaint,
