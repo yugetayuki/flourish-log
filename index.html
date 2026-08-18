@@ -135,7 +135,7 @@ svg{display:block}
 <body>
 <div id="wrap">
   <header>
-    <div class="title"><h1>Aubade</h1><span class="eyebrow mono">DAWN&nbsp;LOG&nbsp;·&nbsp;v4.16</span></div>
+    <div class="title"><h1>Aubade</h1><span class="eyebrow mono">DAWN&nbsp;LOG&nbsp;·&nbsp;v4.17</span></div>
     <span id="saveState"></span>
   </header>
   <div id="banner"></div>
@@ -170,6 +170,9 @@ var WORK_MIN    = minRange(0, 840, 30);     // 0〜14h
 // 先頭に足すと既存の値の意味がずれるので、schema 17 の migrate で +1 して読み替えている
 var LOAD_OPTS   = ["なし","軽い","普通","重い"];
 var STUDY_MIN   = minRange(0, 240, 15);     // 0〜4h
+// 瞑想は5〜30分が実勢なので勉強(15分刻み)では粗すぎる。刻みを細かくしてよいのは物理量だけで、
+// 主観尺度(眠れた感・気分)の段数は変えない — 主観に外部の実値は無く、疑似精度だけが増えるため
+var MEDITATION_MIN = minRange(0, 120, 5);   // 0〜2h
 // 24時を超えた就寝は 25:12 のように繰り上がりのまま出す(日をまたいだことが読めるように)
 function fmtHM(v){ return Math.floor(v/60) + ":" + pad(v%60); }
 // YouTube は時刻ではなく時間量なので時計表記にしない。推移タブの左余白(44px)に収まる短さも要件
@@ -235,6 +238,9 @@ var CORE = [
   // v4.7 で真偽値 study から分の実値 studyMin へ移した。キー改名なので台帳の上で別フィールドになり、
   // 同一キーに2つの意味が混ざることは構造的に起きない(v9 の就寝・起床と同じ手)
   {id:"studyMin", label:"勉強"},
+  // schema 20(2026-08-18)。momentum の習慣「瞑想」を移した。あちらは habit_id(UUID)しか
+  // 台帳に出しておらず、習慣を消すと過去のイベントが解読不能になる(台帳は追記オンリー)
+  {id:"meditationMin", label:"瞑想"},
   {id:"sauna", label:"サウナ"},
   {id:"bath", label:"お風呂・肌ケア"},
   {id:"mouth", label:"マウスケア"},
@@ -257,13 +263,13 @@ function md(s){ return (+s.slice(5,7))+"/"+(+s.slice(8,10)); }
 /* ================= データ ================= */
 function defaultData(){
   return {
-    version: 19,
-    targets: {bedtimeMin:5, youtubeMin:5, ashwagandha:6, coffee:6, creatine:6, weight:5, gym:3, studyMin:5, sauna:2, bath:6, mouth:6, protein:6, stepsCount:5, sober:4, meal:5, supp:6},
+    version: 20,
+    targets: {bedtimeMin:5, youtubeMin:5, ashwagandha:6, coffee:6, creatine:6, weight:5, gym:3, studyMin:5, meditationMin:5, sauna:2, bath:6, mouth:6, protein:6, stepsCount:5, sober:4, meal:5, supp:6},
     // 分の実値。境界は v8 までの選択肢と同じに保つ(24:00以内 / 1h以内)。
     // 入力が15分刻みになっても達成ラインは粗いままにする — 15分単位で締め上げられる状態は
     // 完璧主義に対する逆向きのラチェットになるため(設計制約1の趣旨)
-    th: {bedtimeMin:1440, youtubeMin:60, stepsCount:8000, studyMin:15},
-    enabled: {bedtimeMin:true, wakeMin:true, sleepFeel:true, youtubeMin:true, ashwagandha:true, coffee:true, creatine:true, weight:true, gym:true, studyMin:true, sauna:true, bath:true, mouth:true, protein:true, stepsCount:true, waterMl:true, sober:true, eatout:true, companion:true, workMin:true, workLoad:true, meal:true, supp:true, mood:true},
+    th: {bedtimeMin:1440, youtubeMin:60, stepsCount:8000, studyMin:15, meditationMin:10},
+    enabled: {bedtimeMin:true, wakeMin:true, sleepFeel:true, youtubeMin:true, ashwagandha:true, coffee:true, creatine:true, weight:true, gym:true, studyMin:true, meditationMin:true, sauna:true, bath:true, mouth:true, protein:true, stepsCount:true, waterMl:true, sober:true, eatout:true, companion:true, workMin:true, workLoad:true, meal:true, supp:true, mood:true},
     custom: [],
     entries: {},
     lastBackup: null,
@@ -481,6 +487,8 @@ function achieved(data, e, id){
   if (id === "youtubeMin") return e.youtubeMin == null ? null : e.youtubeMin <= data.th.youtubeMin;
   if (id === "stepsCount") return e.stepsCount == null ? null : e.stepsCount >= data.th.stepsCount;
   if (id === "studyMin") return studyDone(data, e);
+  // 勉強と違い旧キーが無いので studyDone に相当する関数は要らない(真偽→分の移行を経ていない)
+  if (id === "meditationMin") return e.meditationMin == null ? null : e.meditationMin >= data.th.meditationMin;
   // 食事・サプリは3回ぶんの入力を1日の達成に畳む。記録しなかった回は失敗ではないので分母に入れない
   var g = perDay(id);
   if (g) {
@@ -571,7 +579,7 @@ function weekStats(data, ws, today){
   // 段数は選択肢配列から導く。書き写すと刻みを変えたとき最後の段が黙って集計から落ちる
   return {range: md(days[0])+"–"+md(days[6]), logged:logged, items:per,
     bedtimeMin:vals("bedtimeMin"), wakeMin:vals("wakeMin"), youtubeMin:vals("youtubeMin"),
-    waterMl:vals("waterMl"), studyMin:vals("studyMin"), workMin:vals("workMin"),
+    waterMl:vals("waterMl"), studyMin:vals("studyMin"), meditationMin:vals("meditationMin"), workMin:vals("workMin"),
     workLoad:dist("workLoad",LOAD_OPTS.length),
     sleepFeel:dist("sleepFeel",SLEEP_OPTS.length), stepsCount:vals("stepsCount"),
     companion:dist("companion",COMPANION_OPTS.length),
@@ -584,7 +592,7 @@ function csvCell(v){
   return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g,'""') + '"' : s;
 }
 function buildCSV(data){
-  var cols=["date","就寝時刻(分)","起床時刻(分)","眠れた感","YouTube(分)","アシュワガンダ","朝コーヒー","クレアチン","体重測定","体重","ジム","勉強(旧・真偽)","勉強(分)","サウナ","お風呂・肌ケア","マウスケア","タンパク質","歩数(歩)","水分(ml)","業務時間(分)","仕事の重さ","休肝日","外食","誰と","ひとこと"]
+  var cols=["date","就寝時刻(分)","起床時刻(分)","眠れた感","YouTube(分)","アシュワガンダ","朝コーヒー","クレアチン","体重測定","体重","ジム","勉強(旧・真偽)","勉強(分)","瞑想(分)","サウナ","お風呂・肌ケア","マウスケア","タンパク質","歩数(歩)","水分(ml)","業務時間(分)","仕事の重さ","休肝日","外食","誰と","ひとこと"]
     .concat(perDayParts().map(function(p){return p.label;}))
     .concat(MOOD.parts.map(function(p){return p.label+"の気分";}))
     .concat(data.custom.map(function(c){return c.label;}));
@@ -600,7 +608,7 @@ function buildCSV(data){
       e.youtubeMin!=null?e.youtubeMin:"",
       b(e.ashwagandha), b(e.coffee), b(e.creatine), b(e.weight), e.weightVal!=null?e.weightVal:"", b(e.gym),
       // 旧列を残すのは v4.7 より前の日の記録が読めなくなるため。新しい日は右の列にだけ入る
-      b(e.study), e.studyMin!=null?e.studyMin:"",
+      b(e.study), e.studyMin!=null?e.studyMin:"", e.meditationMin!=null?e.meditationMin:"",
       b(e.sauna), b(e.bath), b(e.mouth), b(e.protein), e.stepsCount!=null?e.stepsCount:"", e.waterMl!=null?e.waterMl:"", e.workMin!=null?e.workMin:"", e.workLoad!=null?LOAD_OPTS[e.workLoad]:"", b(e.sober),
       b(e.eatout),
       e.companion!=null?COMPANION_OPTS[e.companion]:"",
@@ -632,6 +640,8 @@ function buildReviewText(data, today){
     + "「1日2Lは飲むべき」のような外部の基準を持ち込まないでください。"
     + "studyMin は勉強した分の実値です(15分刻み)。v4.7 より前の日は真偽値でしか記録がなく"
     + "この一覧に入らないので、日数が少ない週は移行の途中である可能性を考慮してください。\n"
+    + "meditationMin は瞑想した分の実値です(5分刻み)。schema 20 より前の日は記録が無いので、"
+    + "この一覧に入らない日は未入力であって0分ではありません。\n"
     + "bedtimeMin / wakeMin / youtubeMin は分の実値を昇順に並べたものです"
     + "(就寝は 24:00=1440 で、24時を超えた日は1440超。YouTube は視聴した分数)。\n"
     + "mood は["+MOOD.parts.map(function(p){return p.label;}).join(",")+"]の3枠ぶんの分布で、各枠が上の凡例の並びです。"
@@ -834,6 +844,15 @@ function saveSync(){
  * 日付は開始時点で決める。日をまたいで止めても、始めた日の勉強として数える。
  */
 var TIMER_KEY = KEY + "-timer";
+// 計測できる種別。**記録先フィールドとラベルの出所はここだけ**にする(分岐に書き写すと
+// 種別を足したとき片方だけ古いまま残る)。どちらも前日を指すので timerTarget は共通でよい
+var TIMER_KINDS = [{id:"study", field:"studyMin", label:"勉強"}, {id:"meditation", field:"meditationMin", label:"瞑想"}];
+// 不正な kind は既定へ倒す。v4.16 以前の走行中の状態は kind を持たない(当時は勉強専用)ので、
+// リロードしただけで記録先が消えないよう study として読む
+function timerKind(id){
+  for (var i=0;i<TIMER_KINDS.length;i++) if (TIMER_KINDS[i].id === id) return TIMER_KINDS[i];
+  return TIMER_KINDS[0];
+}
 // 止め忘れの上限。これを超えた経過は記録せず、手入力に回す。
 // 黙って巨大な値を書き込むと、週の合計が一度で壊れ、しかも原因が分からなくなる
 var TIMER_MAX_MIN = 360;
@@ -846,7 +865,7 @@ function loadTimer(){
     var o = JSON.parse(t);
     if (!o || typeof o.startedAt !== "number" || !isFinite(o.startedAt)) return null;
     if (typeof o.day !== "string") return null;
-    return {startedAt: o.startedAt, day: o.day};
+    return {startedAt: o.startedAt, day: o.day, kind: timerKind(o.kind).id};
   } catch(e) {
     console.error("[flourish] タイマーの状態を読めませんでした", e);
     return null;
@@ -858,7 +877,7 @@ function persistTimer(){
     else localStorage.removeItem(TIMER_KEY);
   } catch(e) { console.error("[flourish] タイマーの状態を保存できませんでした", e); }
 }
-/** 開始した日の勉強は翌日ぶんのエントリに入る(studyMin は前日を指すため) */
+/** 開始した日の計測は翌日ぶんのエントリに入る(studyMin / meditationMin はどちらも前日を指すため) */
 function timerTarget(day){ return fmt(addDays(parseD(day), 1)); }
 function timerElapsedSec(){
   if (!timerState) return 0;
@@ -1031,6 +1050,7 @@ function viewLog(today){
   if (en.weight) fields.push(e.weight!=null);
   if (en.gym) fields.push(e.gym!=null);
   if (en.studyMin) fields.push(e.studyMin!=null || e.study!=null);
+  if (en.meditationMin) fields.push(e.meditationMin!=null);
   if (en.sauna) fields.push(e.sauna!=null);
   if (en.bath) fields.push(e.bath!=null);
   if (en.mouth) fields.push(e.mouth!=null);
@@ -1100,6 +1120,8 @@ function viewLog(today){
   if (en.protein) y += row("タンパク質","規定量以上とれたか", pairBtn("protein", e.protein!=null?e.protein:null));
   if (en.studyMin) y += row("勉強","昨日の合計",
     minSelect("studyMin", STUDY_MIN, e.studyMin!=null?e.studyMin:null, fmtDur));
+  if (en.meditationMin) y += row("瞑想","昨日の合計",
+    minSelect("meditationMin", MEDITATION_MIN, e.meditationMin!=null?e.meditationMin:null, fmtDur));
   if (en.sober) y += row("休肝日","前日に酒を飲んだか",
     pairBtn("sober", e.sober!=null?e.sober:null, {t:"✓ 飲まなかった", f:"✗ 飲んだ"}));
   // 外食も達成判定を持たない。外食は良し悪しではなく、節制(meal)とも独立している
@@ -1176,28 +1198,38 @@ function viewLog(today){
  */
 function viewTimer(today){
   var tgt = timerTarget(today);
-  var acc = (S.entries[tgt] || {}).studyMin;
-  var h = '<div class="card"><div class="chead"><span class="ctitle">勉強タイマー</span></div>';
-  if (timerState) {
+  var run = timerState ? timerKind(timerState.kind) : null;
+  var h = '<div class="card"><div class="chead"><span class="ctitle">タイマー</span>'
+    + (run ? '<span style="color:var(--sub);font-size:13px">' + esc(run.label) + 'を計測中</span>' : '')
+    + '</div>';
+  if (run) {
     // 中身は timerPaint() が毎秒書き換える。ここでは初期値だけ入れる
     h += '<div class="mono" id="timerElapsed" style="font-size:34px;text-align:center;padding:16px 0;'
       + 'font-variant-numeric:tabular-nums">' + esc(fmtClock(timerElapsedSec())) + '</div>'
       + '<button class="sb on on-pine" data-action="timerStop" style="width:100%;padding:12px">■ 停止して記録</button>';
   } else {
-    h += '<button class="sb on on-pine" data-action="timerStart" style="width:100%;padding:12px">▶ 開始</button>';
+    // 走行中は停止だけを出す。開始ボタンを残すと「別の種別なら押せる」と読めるが、
+    // 状態は単一なので実際には押せない(押しても排他で弾かれる)
+    h += '<div style="display:flex;gap:8px">' + TIMER_KINDS.map(function(k){
+      return '<button class="sb on on-pine" data-action="timerStart" data-kind="' + esc(k.id)
+        + '" style="flex:1;padding:12px">▶ ' + esc(k.label) + '</button>';
+    }).join("") + '</div>';
   }
   h += '</div>';
-  h += '<div class="card"><div class="chead"><span class="ctitle">' + esc(md(tgt)) + ' の勉強</span>'
-    + '<span class="mono" style="color:var(--sub)">'
-    + esc(typeof acc === "number" ? fmtDur(acc) : "—") + '</span></div>'
-    + '<p style="font-size:13px;color:var(--sub);padding:4px 0 0">'
-    + '今日の勉強は、記録タブでは ' + esc(md(tgt)) + ' の欄に入ります'
-    + '(勉強は前日ぶんを翌日に記録するため)。手で直すときはそちらから。</p></div>';
+  // 累計は種別ぶん並べる。出所を TIMER_KINDS にしてあるので、種別を足すと自動でここにも出る
+  h += '<div class="card"><div class="chead"><span class="ctitle">' + esc(md(tgt)) + ' の記録</span></div>';
+  h += TIMER_KINDS.map(function(k){
+    var acc = (S.entries[tgt] || {})[k.field];
+    return '<div class="srow"><span style="font-size:14px">' + esc(k.label) + '</span>'
+      + '<span class="mono" style="color:var(--sub)">' + esc(typeof acc === "number" ? fmtDur(acc) : "—") + '</span></div>';
+  }).join("");
+  h += '<p style="font-size:13px;color:var(--sub);padding:4px 0 0">'
+    + '今日の計測は、記録タブでは ' + esc(md(tgt)) + ' の欄に入ります'
+    + '(どちらも前日ぶんを翌日に記録するため)。手で直すときはそちらから。</p></div>';
   h += '<p class="foot">タイマーは開始時刻だけを覚えます。アプリを閉じても経過は進み、'
     + '止めたときに実時間で記録します。押し忘れたぶんは記録タブで直接入力できます。</p>';
   return h;
 }
-
 /* ================= 週 ================= */
 function viewWeek(today){
   var ws = weekStart(parseD(today));
@@ -1505,6 +1537,10 @@ function viewReview(today){
       // 達成の判定は studyDone に一元化。旧データ(真偽値)と新データ(分)が混ざった期間でも
       // 週タブと同じ結果になる。ここで e.study を直接見ると、移行後に相関ヒントだけ静かに欠ける
       {l:"勉強した × YouTube多め", ps:mk(function(e){return studyDone(S, e);}, function(e){return e.youtubeMin==null?null:e.youtubeMin>60;})},
+      // 瞑想は主観状態との突き合わせのために足した項目なので、対も眠れた感と朝の気分に置く。
+      // 達成ラインは可変なので th を直接見る(閾値を変えると過去の対の意味も変わるのは他項目と同じ)
+      {l:"瞑想が達成ライン以上 × 眠れた感「良」", ps:mk(function(e){return e.meditationMin==null?null:e.meditationMin>=S.th.meditationMin;}, function(e){return e.sleepFeel==null?null:e.sleepFeel===0;})},
+      {l:"瞑想が達成ライン以上 × 朝の気分「高」", ps:mk(function(e){return e.meditationMin==null?null:e.meditationMin>=S.th.meditationMin;}, function(e){return e.moodM==null?null:e.moodM===0;})},
       // 仕事は他の項目の上流にありうる。棚卸しで「ジムに行けない理由は仕事との摩擦」と出たので、
       // ここだけが「なぜそうなったか」に届く対になる
       {l:"仕事が重い × 前日に酒を飲んだ", ps:mk(function(e){return e.workLoad==null?null:e.workLoad===3;}, function(e){return e.sober==null?null:e.sober===false;})},
@@ -1599,13 +1635,16 @@ function viewSettings(){
   h += '<div class="srow"><span style="font-size:14px">勉強</span><select data-th="studyMin">';
   [15,30,45,60,90].forEach(function(v){ h += '<option value="'+v+'"'+(S.th.studyMin===v?' selected':'')+'>'+esc(fmtDur(v))+' から達成</option>'; });
   h += '</select></div>';
+  h += '<div class="srow"><span style="font-size:14px">瞑想</span><select data-th="meditationMin">';
+  [5,10,15,20,30,45,60].forEach(function(v){ h += '<option value="'+v+'"'+(S.th.meditationMin===v?' selected':'')+'>'+esc(fmtDur(v))+' から達成</option>'; });
+  h += '</select></div>';
   // 歩数だけは「以上で達成」の向き。最下段を選べるようにすると全ての日が達成になるので出さない
   h += '<div class="srow"><span style="font-size:14px">歩数</span><select data-th="stepsCount">';
   [3000,5000,8000,10000,12000,15000].forEach(function(v){ h += '<option value="'+v+'"'+(S.th.stepsCount===v?' selected':'')+'>'+esc(fmtSteps(v))+' から達成</option>'; });
   h += '</select></div></div>';
 
   h += '<div class="card"><div class="chead"><span class="ctitle">表示する項目</span></div>';
-  var togs=[["bedtimeMin","就寝時刻"],["wakeMin","起床時刻"],["sleepFeel","眠れた感"],["youtubeMin","YouTube"],["ashwagandha","アシュワガンダ"],["coffee","朝コーヒー"],["creatine","クレアチン"],["weight","体重測定"],["gym","ジム"],["studyMin","勉強"],["sauna","サウナ"],["bath","お風呂・肌ケア"],["mouth","マウスケア"],["protein","タンパク質"],["stepsCount","歩数"],["waterMl","水分"],["workMin","業務時間"],["workLoad","仕事の重さ"],["sober","休肝日"],["eatout","外食"],["companion","誰と"]]
+  var togs=[["bedtimeMin","就寝時刻"],["wakeMin","起床時刻"],["sleepFeel","眠れた感"],["youtubeMin","YouTube"],["ashwagandha","アシュワガンダ"],["coffee","朝コーヒー"],["creatine","クレアチン"],["weight","体重測定"],["gym","ジム"],["studyMin","勉強"],["meditationMin","瞑想"],["sauna","サウナ"],["bath","お風呂・肌ケア"],["mouth","マウスケア"],["protein","タンパク質"],["stepsCount","歩数"],["waterMl","水分"],["workMin","業務時間"],["workLoad","仕事の重さ"],["sober","休肝日"],["eatout","外食"],["companion","誰と"]]
     .concat(PERDAY.map(function(g){ return [g.id, g.label]; }))
     .concat([[MOOD.id, MOOD.label]]);
   togs.forEach(function(t){
@@ -1672,7 +1711,7 @@ function viewSettings(){
   h += '</div></div>';
 
   h += '<p class="foot">データはこの端末のブラウザ(このアプリ)内にのみ保存されます。バックアップはJSONコピーで。'
-    + 'このアプリの役割は計測と週次フィードバックまで — 行動を変えるのは環境設計の仕事です。 v4.16</p>';
+    + 'このアプリの役割は計測と週次フィードバックまで — 行動を変えるのは環境設計の仕事です。 v4.17</p>';
   return h;
 }
 
@@ -1790,12 +1829,17 @@ document.addEventListener("click", function(ev){
     save(); render(); return;
   }
   if (a === "timerStart") {
-    timerState = {startedAt: Date.now(), day: fmt(new Date())};
-    persistTimer(); flash("タイマー開始", false); render(); return;
+    // 走行中に別の種別を開始できてしまうと、どちらの経過なのか状態から復元できない。
+    // 状態は単一オブジェクトなので、排他はここで閉じる
+    if (timerState) { flash("すでに" + timerKind(timerState.kind).label + "を計測中です", true); return; }
+    var k = timerKind(ac.dataset.kind);
+    timerState = {startedAt: Date.now(), day: fmt(new Date()), kind: k.id};
+    persistTimer(); flash(k.label + "タイマー開始", false); render(); return;
   }
   if (a === "timerStop") {
     var mins = timerElapsedMin();
     var tday = timerTarget(timerState.day);
+    var kind = timerKind(timerState.kind);
     timerState = null; persistTimer();
     // 止め忘れは「実際より長い」方向にしか壊れない。黙って足すと週の合計が一度で狂い、
     // しかも後から見て異常だと気づけない。記録せず、手入力へ回す
@@ -1807,7 +1851,7 @@ document.addEventListener("click", function(ev){
     }
     if (mins > 0) {
       var te = Object.assign({}, S.entries[tday] || {});
-      te.studyMin = (typeof te.studyMin === "number" ? te.studyMin : 0) + mins;
+      te[kind.field] = (typeof te[kind.field] === "number" ? te[kind.field] : 0) + mins;
       S.entries[tday] = te;
       save();
     }
@@ -1950,6 +1994,7 @@ window.__flourish = {
   BEDTIME_MIN: BEDTIME_MIN, WAKE_MIN: WAKE_MIN, YT_MIN: YT_MIN, WATER_ML: WATER_ML,
   WORK_MIN: WORK_MIN, LOAD_OPTS: LOAD_OPTS,
   STUDY_MIN: STUDY_MIN, studyDone: studyDone,
+  MEDITATION_MIN: MEDITATION_MIN,
   TIMER_KEY: TIMER_KEY, TIMER_MAX_MIN: TIMER_MAX_MIN,
   getTimer: function(){ return timerState; },
   fmtClock: fmtClock, timerPaint: timerPaint,

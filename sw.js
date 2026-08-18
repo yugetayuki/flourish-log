@@ -8,7 +8,7 @@
 // キャッシュ名にはバージョンを含める。リリース時にここも上げること(手順は .claude/skills/release)。
 // 上げ忘れても activate で古い名前を消す仕組みが働かないだけで、ネットワーク優先なので
 // 表示が古くなることはない。
-var CACHE = "aubade-v4.16";
+var CACHE = "aubade-v4.17";
 var SHELL = "./index.html";
 
 self.addEventListener("install", function(e){
