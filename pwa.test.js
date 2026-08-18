@@ -1374,7 +1374,9 @@ describe("PWA v4.21: 瞑想(分の実値)", () => {
 // 昼寝は長いほど良いわけではない)、(b) 夜の睡眠に対して逆向きに効きうる2つが同じ φ に入って相殺する。
 // 台帳は追記オンリーで後から分離できないので、分けたことを後退させないガードを置く
 describe("PWA v4.21: 昼寝(計測のみ)", () => {
-  const seed = (min) => JSON.stringify({ version: 21, entries: { "2026-08-08": { napMin: min } } });
+  // schema 22 で napMin は当日を指す。移行を走らせたくないので版は現行のまま置く
+  // (v22 の1日ずらし自体は下の「昼寝を当日へ移す(v22)」で見る)
+  const seed = (min) => JSON.stringify({ version: 22, entries: { "2026-08-08": { napMin: min } } });
 
   it("記録タブに昼寝の select が出て、選ぶと分の実値が入る", () => {
     const dom = boot();
@@ -1453,16 +1455,17 @@ describe("PWA v4.21: 昼寝(計測のみ)", () => {
   // 達成ラインを持たないので二値化は「した/していない」でなければならない
   it("【後退ガード】相関ヒントに昼寝の対があり、二値化が napMin>0 である", () => {
     const html = readFileSync("index.html", "utf8");
-    expect(html).toMatch(/前日に昼寝した × 眠れた感/);
-    expect(html).toMatch(/前日に昼寝した × 朝の気分/);
-    // 効果側に届く唯一の対。前日を指す napMin と当日を指す moodE は別の日付キーに入るので、
-    // mk では作れない(mkPrev が要る)。**mk に戻しても行は消えない** — 同じエントリに
-    // 両方ある日が拾われ、1日ずれた対が黙って作られる(下のガードでは φ の符号が反転する)
-    expect(html).toMatch(/前日に昼寝した × その日の晩の気分「高」\(晩も記録した日だけ\)", ps:mkPrev\(/);
-    // **mkPrev を使う対は1本だけ**に固定する。fa=前日を指す項目 / fb=当日を指す項目 という前提は
-    // シグネチャから読めずコメントにしかないので、2本目を足したときに必ずここで落として
-    // 時点の前提を読み直させる(このガードが無いと、2本目のずれは誰にも検出されない)
-    expect(html.match(/ps:mkPrev\(/g).length).toBe(1);
+    // コスト側の2本。napMin は当日を指し(schema 22)、その夜の眠れた感と翌朝の気分は
+    // **翌日のエントリ**にあるので mkNext が要る。mk に戻しても行は消えず、
+    // 同じエントリに両方ある日が拾われて1日ずれた対が黙って作られる
+    expect(html).toMatch(/昼寝した × その夜の眠れた感「良」", ps:mkNext\(/);
+    expect(html).toMatch(/昼寝した × 翌朝の気分「高」", ps:mkNext\(/);
+    // 効果側の1本だけは、昼寝と晩の気分がどちらも当日を指すので同じエントリで対になる
+    expect(html).toMatch(/昼寝した × その日の晩の気分「高」\(晩も記録した日だけ\)", ps:mk\(/);
+    // **mkNext を使う対は2本だけ**に固定する。fa=当日を指す項目 / fb=翌日のエントリから取る項目
+    // という前提はシグネチャから読めずコメントにしかないので、3本目を足したときに必ずここで
+    // 落として時点の前提を読み直させる(このガードが無いと、3本目のずれは誰にも検出されない)
+    expect(html.match(/ps:mkNext\(/g).length).toBe(2);
     expect(html).toMatch(/e\.napMin==null\?null:e\.napMin>0/);
     // 達成ラインを参照していたら、th.napMin を足した誰かが向きの逆な判定を持ち込んでいる
     expect(html).not.toMatch(/th\.napMin/);
@@ -1477,14 +1480,16 @@ describe("PWA v4.21: 昼寝(計測のみ)", () => {
     for (let i = 0; i < 28; i++) {
       const dt = new Date("2026-07-01T00:00");
       dt.setDate(dt.getDate() + i);
-      // 昼寝した日は眠れず気分も低い、という完全な相関を作る(φ=1.00 になる)
-      d.entries[f0.fmt(dt)] = { napMin: i % 2 === 0 ? 20 : 0, sleepFeel: i % 2 === 0 ? 2 : 0, moodM: i % 2 === 0 ? 2 : 0 };
+      // 昼寝した日は「その夜」眠れず「翌朝」の気分も低い、という完全な相関を作る。
+      // napMin は当日を指し、眠れた感と朝の気分は翌日のエントリにあるので、
+      // 悪い値(=2)は昼寝した日の**次の日**へ置く
+      d.entries[f0.fmt(dt)] = { napMin: i % 2 === 0 ? 20 : 0, sleepFeel: i % 2 === 1 ? 2 : 0, moodM: i % 2 === 1 ? 2 : 0 };
     }
     const dom = boot(JSON.stringify(d));
     byText(dom, "button.tb", "週報").click();
     const view = q(dom, "#view").textContent;
-    expect(view).toContain("前日に昼寝した × 眠れた感「良」");
-    expect(view).toContain("前日に昼寝した × 朝の気分「高」");
+    expect(view).toContain("昼寝した × その夜の眠れた感「良」");
+    expect(view).toContain("昼寝した × 翌朝の気分「高」");
     // 構造上の事実(測っていない)と、行動についての推測(交絡)は確かさが違うので分けて出す。
     // 推測を断定形で書かない — 落とすと「効果があるかもしれない側」だけを弁護する一文になる
     expect(view).toContain("日中の集中力・脳疲労は測っていません");
@@ -1492,41 +1497,39 @@ describe("PWA v4.21: 昼寝(計測のみ)", () => {
     expect(view).toContain("関係が出なくても、効果が無いという意味ではありません");
   });
 
-  // 効果側に届く唯一の対。napMin は前日を指し(entries[d] に d-1 の昼寝)、
-  // moodE は当日を指す(entries[d-1] に d-1 の晩)ので、同じ暦日なのに別の日付キーに入る。
-  // mkPrev が fb 側だけを1日戻して時点を揃える
-  it("【後退ガード】昼寝 × その日の晩の気分が、前日エントリを参照して対になる", () => {
+  // 効果側に届く唯一の対。schema 22 で napMin が当日を指すようになり、moodE と同じ日付キーに
+  // 入るので、この1本だけが mk で作れる。mkNext に変えると1日ずれた対が黙って作られる
+  it("【後退ガード】昼寝 × その日の晩の気分が、同じエントリで対になる", () => {
     const f0 = boot().window.__flourish;
     const d = f0.defaultData();
     for (let i = 0; i < 28; i++) {
       const dt = new Date("2026-07-01T00:00");
       dt.setDate(dt.getDate() + i);
-      // 「7/2 の朝に入れた napMin」は 7/1 の昼寝を指し、7/1 の晩の気分と対になる。
       // 昼寝した日は晩の気分が高い、という完全な相関を作る(φ=1.00)
-      d.entries[f0.fmt(dt)] = { napMin: i % 2 === 1 ? 20 : 0, moodE: i % 2 === 0 ? 0 : 2 };
+      d.entries[f0.fmt(dt)] = { napMin: i % 2 === 0 ? 20 : 0, moodE: i % 2 === 0 ? 0 : 2 };
     }
     const dom = boot(JSON.stringify(d));
     byText(dom, "button.tb", "週報").click();
     const rows = qa(dom, "#view .row").filter((el) => el.textContent.includes("晩の気分「高」(晩も記録した日だけ)"));
-    const napRow = rows.find((el) => el.textContent.includes("前日に昼寝した"));
+    const napRow = rows.find((el) => el.textContent.includes("昼寝した"));
     expect(napRow).toBeTruthy();
-    // 同じ entry で対にすると n=0 になり、14日フィルタで行ごと消える
     expect(napRow.textContent).toContain("φ=1.00");
   });
 
-  // 前日のエントリが無い日は対を作らない(先頭の日・記録が飛んだ日)
-  it("前日のエントリが無い日は晩の気分の対に数えない", () => {
+  // 翌日のエントリが無い日は対を作らない(末尾の日・記録が飛んだ日)。
+  // mkPrev のときは先頭の日が落ちていたので、向きが変わったことをここで見る
+  it("翌日のエントリが無い日はその夜の眠れた感の対に数えない", () => {
     const f0 = boot().window.__flourish;
     const d = f0.defaultData();
     for (let i = 0; i < 28; i++) {
       const dt = new Date("2026-07-01T00:00");
       dt.setDate(dt.getDate() + i);
-      d.entries[f0.fmt(dt)] = { napMin: i % 2 === 1 ? 20 : 0, moodE: i % 2 === 0 ? 0 : 2 };
+      d.entries[f0.fmt(dt)] = { napMin: i % 2 === 0 ? 20 : 0, sleepFeel: i % 2 === 1 ? 2 : 0 };
     }
-    // 先頭の日は前日が無いので、n は 28 ではなく 27 になる
+    // 末尾の日は翌日が無いので、n は 28 ではなく 27 になる
     const dom = boot(JSON.stringify(d));
     byText(dom, "button.tb", "週報").click();
-    const napRow = qa(dom, "#view .row").find((el) => el.textContent.includes("前日に昼寝した × その日の晩の気分"));
+    const napRow = qa(dom, "#view .row").find((el) => el.textContent.includes("昼寝した × その夜の眠れた感"));
     expect(napRow.textContent).toContain("n=27");
   });
 
@@ -1540,12 +1543,12 @@ describe("PWA v4.21: 昼寝(計測のみ)", () => {
     for (let i = 0; i < 28; i++) {
       const dt = new Date("2026-07-01T00:00");
       dt.setDate(dt.getDate() + i);
-      d.entries[f0.fmt(dt)] = { napMin: i % 2 === 0 ? 20 : 0, sleepFeel: i % 2 === 0 ? 2 : 0, moodM: i % 2 === 0 ? 2 : 0 };
+      d.entries[f0.fmt(dt)] = { napMin: i % 2 === 0 ? 20 : 0, sleepFeel: i % 2 === 1 ? 2 : 0, moodM: i % 2 === 1 ? 2 : 0 };
     }
     const dom = boot(JSON.stringify(d));
     byText(dom, "button.tb", "週報").click();
     const view = q(dom, "#view").textContent;
-    expect(view).toContain("前日に昼寝した × 眠れた感「良」");
+    expect(view).toContain("昼寝した × その夜の眠れた感「良」");
     expect(view).toContain("関係が出なくても、効果が無いという意味ではありません");
   });
 
@@ -1563,20 +1566,23 @@ describe("PWA v4.21: 昼寝(計測のみ)", () => {
     byText(dom, "button.tb", "週報").click();
     const view = q(dom, "#view").textContent;
     expect(view).toContain("相関であって因果ではありません");
-    expect(view).not.toContain("前日に昼寝した");
+    expect(view).not.toContain("昼寝した ×");
     // 注記は2文あるので、負の側も2本置く。片方だけだと、もう片方を条件の外へ出しても落ちない
     expect(view).not.toContain("日中の集中力・脳疲労は測っていません");
     expect(view).not.toContain("効果が無いという意味ではありません");
   });
 
-  // 【後退ガード】真上の瞑想が「10分以上で達成」の同形の行なので、注記が無いと
-  // 昼寝にも達成ラインがあるように見える(業務時間・仕事の重さと同じ明示)
-  it("【後退ガード】記録タブの注記に「計測のみ」がある", () => {
+  // 【後退ガード】当日カードへ移した(v22)ので「昨日」カードには出さない。
+  // 達成ラインを持たないことは水分と同じく foot で明示する
+  // (当日カード群には閾値を持つ行が無いので、真上に達成ラインのある行は並ばない)
+  it("【後退ガード】当日カードに出て、達成/未達が無いことを明示する", () => {
     const dom = boot();
-    const card = qa(dom, ".card").find((el) => el.textContent.includes("昨日"));
-    expect(card.textContent).toContain("昼寝");
-    const label = qa(dom, ".row").find((el) => el.textContent.startsWith("昼寝"));
-    expect(label.textContent).toContain("計測のみ");
+    const yday = qa(dom, ".card").find((el) => el.textContent.includes("昨日"));
+    expect(yday.textContent).not.toContain("昼寝");
+    const card = qa(dom, "#view .card").find((el) => el.textContent.includes("今日の昼寝"));
+    expect(card).toBeTruthy();
+    expect(q(dom, 'select[data-f="napMin"]')).not.toBe(null);
+    expect(q(dom, "#view").textContent).toContain("達成/未達はありません。昼寝の最適量は前夜の睡眠しだいで変わるため");
   });
 
   // 追加のみなので値の変換は要らない。既存の日を書き換えないことを見る
@@ -1586,6 +1592,60 @@ describe("PWA v4.21: 昼寝(計測のみ)", () => {
     expect(m.version).toBe(CURRENT_SCHEMA);
     expect(m.entries["2026-08-08"]).toEqual({ meditationMin: 15 });
     expect(m.enabled.napMin).toBe(true);
+  });
+});
+
+// 昼寝は日中に起きるが、勉強・瞑想と違ってタイマーを持てない(アプリは通知を持たないので
+// 鳴らないタイマーでは起きられない)。前日を指したままだと今日ぶんを入れるのに明日の画面へ
+// 動く必要があり、水分(v18)で実際に翌日ぶんのエントリへ入力されていたのと同じ動線だった
+describe("PWA v4.21: 昼寝を当日へ移す(v22)", () => {
+  const mig = (entries, version) => boot().window.__flourish.migrate({ version: version == null ? 21 : version, entries: entries });
+
+  it("旧 napMin は1日前のキーへ移る", () => {
+    const m = mig({ "2026-08-18": { napMin: 10, sleepFeel: 1 } });
+    expect(m.entries["2026-08-17"]).toEqual({ napMin: 10 });
+    // 同じエントリの他の項目は動かない(指す時点が変わったのは昼寝だけ)
+    expect(m.entries["2026-08-18"]).toEqual({ sleepFeel: 1 });
+    expect(m.version).toBe(CURRENT_SCHEMA);
+  });
+
+  // 移送で空になった日を残すと「記録した日」に数えられる(v18 と同じ理由)
+  it("昼寝だけの日は移送後にキーごと消える", () => {
+    const m = mig({ "2026-08-18": { napMin: 20 } });
+    expect(m.entries["2026-08-18"]).toBe(undefined);
+    expect(m.entries["2026-08-17"]).toEqual({ napMin: 20 });
+  });
+
+  // 取り込みJSONは手で編集できるので、汚れた値が来うる。移した先で実値のふりをさせない
+  it("数値でない napMin と日付でないキーは動かさない", () => {
+    const m = mig({ "2026-08-18": { napMin: "20" }, "not-a-date": { napMin: 30 } });
+    expect(m.entries["2026-08-18"]).toEqual({ napMin: "20" });
+    expect(m.entries["not-a-date"]).toEqual({ napMin: 30 });
+    expect(m.entries["2026-08-17"]).toBe(undefined);
+  });
+
+  // 連続する日が両方 napMin を持つ場合、移送元と移送先が重なる。
+  // 移送先の値も自分の周回で外れているので、上書きで消えてはいけない
+  it("連続した日の昼寝が互いを潰さない", () => {
+    const m = mig({ "2026-08-17": { napMin: 10 }, "2026-08-18": { napMin: 20 } });
+    expect(m.entries["2026-08-16"]).toEqual({ napMin: 10 });
+    expect(m.entries["2026-08-17"]).toEqual({ napMin: 20 });
+    expect(m.entries["2026-08-18"]).toBe(undefined);
+  });
+
+  // 同じJSONを二度通しても二重に移らない(版が上がっているので from < 22 に入らない)
+  it("移行済みのデータを再度通しても動かない", () => {
+    const f = boot().window.__flourish;
+    const once = f.migrate({ version: 21, entries: { "2026-08-18": { napMin: 10 } } });
+    const twice = f.migrate(once);
+    expect(twice.entries).toEqual(once.entries);
+  });
+
+  // th / targets は元から持たない(計測のみ)。水分と違って削除の対象が無いことを見る
+  it("達成ラインと目標を新たに作らない", () => {
+    const m = mig({ "2026-08-18": { napMin: 10 } });
+    expect(m.th.napMin).toBeUndefined();
+    expect(m.targets.napMin).toBeUndefined();
   });
 });
 
@@ -3556,9 +3616,9 @@ describe("PWA v4.21: 水分を当日へ移す(v18)", () => {
   it("明日ぶんを開くと当日カードの見出しが「明日の〜」になる", () => {
     const dom = boot();
     const titles = () => qa(dom, "#view .card .ctitle").map((el) => el.textContent);
-    expect(titles()).toEqual(["昨夜", "今朝", "昨日", "今日の水分", "今日の食事", "今日のサプリ", "今日の気分"]);
+    expect(titles()).toEqual(["昨夜", "今朝", "昨日", "今日の水分", "今日の昼寝", "今日の食事", "今日のサプリ", "今日の気分"]);
     qa(dom, "[data-dn]").find((b) => b.dataset.dn === "1").click();
-    expect(titles()).toEqual(["今夜", "明日の朝", "今日", "明日の水分", "明日の食事", "明日のサプリ", "明日の気分"]);
+    expect(titles()).toEqual(["今夜", "明日の朝", "今日", "明日の水分", "明日の昼寝", "明日の食事", "明日のサプリ", "明日の気分"]);
   });
 
   it("今日の画面のまま今日ぶんが保存される", () => {

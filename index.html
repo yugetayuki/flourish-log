@@ -135,7 +135,7 @@ svg{display:block}
 <body>
 <div id="wrap">
   <header>
-    <div class="title"><h1>Aubade</h1><span class="eyebrow mono">DAWN&nbsp;LOG&nbsp;·&nbsp;v4.21</span></div>
+    <div class="title"><h1>Aubade</h1><span class="eyebrow mono">DAWN&nbsp;LOG&nbsp;·&nbsp;v4.22</span></div>
     <span id="saveState"></span>
   </header>
   <div id="banner"></div>
@@ -300,7 +300,7 @@ function md(s){ return (+s.slice(5,7))+"/"+(+s.slice(8,10)); }
 /* ================= データ ================= */
 function defaultData(){
   return {
-    version: 21,
+    version: 22,
     targets: {bedtimeMin:5, youtubeMin:5, ashwagandha:6, coffee:6, creatine:6, weight:5, gym:3, studyMin:5, meditationMin:5, sauna:2, bath:6, mouth:6, protein:6, stepsCount:5, sober:4, meal:5, supp:6},
     // 分の実値。境界は v8 までの選択肢と同じに保つ(24:00以内 / 1h以内)。
     // 入力が15分刻みになっても達成ラインは粗いままにする — 15分単位で締め上げられる状態は
@@ -354,7 +354,7 @@ function migrate(d){
   // v11 で「誰と過ごしたか」、v12 でひとこと(memo)、v13 で水分、v21 で昼寝(napMin)を追加。
   // 追加した項目はいずれも欠損が既定値で埋まるので値の変換は要らない。
   // 値の変換が要るのは下の from < N ブロックを持つものだけ(v7 の歩数4段階化、v9 の分値化、
-  // v16 の歩数実値化、v17 の仕事の重さのずらし、v18 の水分の1日ずらし)。
+  // v16 の歩数実値化、v17 の仕事の重さのずらし、v18 の水分の1日ずらし、v22 の昼寝の1日ずらし)。
   // v14 の勉強(study→studyMin)は**あえて変換しない**。true は「15分以上」という下限で
   // 実測値ではなく、15 を書き込むと格子に乗って実測と見分けが付かなくなる。
   // 読み出し側(studyDone)が両方を見ることで解いている
@@ -500,6 +500,46 @@ function migrate(d){
     o.entries = water18;
     delete o.th.waterMl;
     delete o.targets.waterMl;
+  }
+  if (from < 22) {
+    // 昼寝を「前日を指す」から「当日を指す」へ移した(v18 の水分と同じ手)。旧 entries[d].napMin は
+    // d-1 の昼寝なので、値を1日前のキーへ移す。昼寝は日中に起きるが、勉強・瞑想と違って
+    // タイマーを持てない(アプリは通知を持たないので鳴らないタイマーでは起きられない)。
+    // その場で入れる経路が無く、前日のままだと今日ぶんを入れるのに明日の画面へ動く必要があった。
+    // 水分で実際に翌日ぶんのエントリへ入力されていたのと同じ動線。
+    // キー改名(v9 / v16 の手)ではなく同一キーの意味変更にしたのは、**台帳へ napMin が1件も
+    // 出ていないことを実測できた**ため(2026-08-18。app-data/work/aubade-*-events.json の全ファイルと
+    // 台帳の写しで0件。napMin の新設が 2026-08-18 で、変換器は8日より古い日しか出さない)。
+    // 出ていたら同一キーに2つの意味が混ざるので改名が要る。
+    // 達成ラインは元から持たないので、水分と違い th / targets からの削除は要らない。
+    var nap22 = {};
+    Object.keys(o.entries).forEach(function(k){
+      var e = o.entries[k];
+      if (!isPlainObject(e)) { nap22[k] = e; return; }
+      // 汚れた値は動かさず素通しする(v18 と同じ向き。移した先で実値のふりをさせない)
+      if (typeof e.napMin !== "number" || !isFinite(e.napMin) || !/^\d{4}-\d{2}-\d{2}$/.test(k)) {
+        nap22[k] = e; return;
+      }
+      var copy = Object.assign({}, e);
+      delete copy.napMin;
+      nap22[k] = copy;
+    });
+    Object.keys(o.entries).forEach(function(k){
+      var e = o.entries[k];
+      if (!isPlainObject(e)) return;
+      if (typeof e.napMin !== "number" || !isFinite(e.napMin) || !/^\d{4}-\d{2}-\d{2}$/.test(k)) return;
+      var prev = fmt(addDays(parseD(k), -1));
+      // 移送先が自分ぶんの昼寝を持っていた場合、それも移送元なので上の周回で既に外れている。
+      // 残っているのは汚れた値だけで、実値で上書きしてよい(情報を持たないため)
+      var dst = isPlainObject(nap22[prev]) ? Object.assign({}, nap22[prev]) : {};
+      dst.napMin = e.napMin;
+      nap22[prev] = dst;
+    });
+    // 昼寝だけの日は移送で空になる。空のエントリを残すと「記録した日」に数えられる
+    Object.keys(nap22).forEach(function(k){
+      if (isPlainObject(nap22[k]) && Object.keys(nap22[k]).length === 0) delete nap22[k];
+    });
+    o.entries = nap22;
   }
   return o;
 }
@@ -683,8 +723,11 @@ function buildReviewText(data, today){
     + "この一覧に入らない日は未入力であって0分ではありません。\n"
     // 昼寝は「多いほど良い」でも「少ないほど良い」でもなく、最適量が前夜の睡眠次第で変わる。
     // 水分・体重と同じく、外部の基準(「昼寝は20分まで」)を持ち込ませない1文が要る
-    + "napMin は昼寝した分の実値です(5分刻み)。schema 21 より前の日は記録が無いので、"
+    // 「schema 21 より前の日は記録が無い」とは書けない。v22 の移行で値が1日前のキーへ
+    // 移るので、schema 21 の導入日より前の日付にも記録が入りうる(guardrail-reviewer の指摘)
+    + "napMin は昼寝した分の実値です(5分刻み)。足したばかりの項目なので記録が無い日が多く、"
     + "この一覧に入らない日は未入力であって0分ではありません。"
+    + "他の多くの項目と違い、記録した日そのものの昼寝を指します(前日ではありません)。"
     + "目標を持たない計測のみで、多い少ないを評価しないでください。分布を事実として述べるのは構いませんが、"
     + "「昼寝は◯分まで」「◯時以降は避けるべき」のような外部の基準を持ち込まないでください。"
     // 分けた理由(夜の睡眠に逆向きに効きうる)は実装側の判断であって、レビューを書く側に渡さない。
@@ -1100,13 +1143,13 @@ function viewLog(today){
   if (en.gym) fields.push(e.gym!=null);
   if (en.studyMin) fields.push(e.studyMin!=null || e.study!=null);
   if (en.meditationMin) fields.push(e.meditationMin!=null);
-  if (en.napMin) fields.push(e.napMin!=null);
   if (en.sauna) fields.push(e.sauna!=null);
   if (en.bath) fields.push(e.bath!=null);
   if (en.mouth) fields.push(e.mouth!=null);
   if (en.protein) fields.push(e.protein!=null);
   if (en.stepsCount) fields.push(e.stepsCount!=null);
   if (en.waterMl) fields.push(e.waterMl!=null);
+  if (en.napMin) fields.push(e.napMin!=null);
   if (en.workMin) fields.push(e.workMin!=null);
   if (en.workLoad) fields.push(e.workLoad!=null);
   if (en.sober) fields.push(e.sober!=null);
@@ -1192,10 +1235,6 @@ function viewLog(today){
     minSelect("studyMin", STUDY_MIN, e.studyMin!=null?e.studyMin:null, fmtDur));
   if (en.meditationMin) y += row("瞑想","昨日の合計",
     minSelect("meditationMin", MEDITATION_MIN, e.meditationMin!=null?e.meditationMin:null, fmtDur));
-  // 真上の瞑想が「10分以上で達成」の同形の行なので、注記が「昨日の合計」だけだと
-  // 昼寝にも達成ラインがあるように見える。業務時間・仕事の重さと同じく明示する
-  if (en.napMin) y += row("昼寝","昨日の合計(計測のみ)",
-    minSelect("napMin", NAP_MIN, e.napMin!=null?e.napMin:null, fmtDur));
   if (en.sober) y += row("休肝日","前日に酒を飲んだか",
     pairBtn("sober", e.sober!=null?e.sober:null, {t:"✓ 飲まなかった", f:"✗ 飲んだ"}));
   // 外食も達成判定を持たない。外食は良し悪しではなく、節制(meal)とも独立している
@@ -1221,6 +1260,17 @@ function viewLog(today){
           minSelect("waterMl", WATER_ML, e.waterMl!=null?e.waterMl:null, fmtMl))
       + '</div><p class="foot">達成/未達はありません。1日の途中では飲み終わっていないため、'
       + '閾値を置くと日中ずっと未達に見えてしまいます。</p>';
+  }
+
+  // 昼寝も当日を指す(schema 22)。日中に起きる行動だが、勉強・瞑想と違ってタイマーを持てない
+  // (アプリは通知を持たないので、鳴らないタイマーでは昼寝から起きられない)。前日を指したままだと
+  // その場で入れる経路が無く、今日ぶんを入れるのに明日の画面へ動く必要があった(水分と同じ動線)
+  if (en.napMin) {
+    h += '<div class="card"><div class="chead"><span class="ctitle">'+esc(dayCard("昼寝"))+'</span></div>'
+      + row("合計","寝たら選び直す",
+          minSelect("napMin", NAP_MIN, e.napMin!=null?e.napMin:null, fmtDur))
+      + '</div><p class="foot">達成/未達はありません。昼寝の最適量は前夜の睡眠しだいで変わるため、'
+      + '長さの良し悪しを決められません。</p>';
   }
 
   // 他のカードと違い朝には埋まらない。その場で1タップする想定なので、指す時点も当日
@@ -1603,18 +1653,18 @@ function viewReview(today){
       return ps;
     }
     /**
-     * 相手を**前日のエントリ**から取る対。前日を指す項目(昼寝・勉強など)と、
-     * 当日を指す項目(気分・食事・水分)は**同じ暦日を指していても別の日付キーに入る**ため、
-     * mk では対にできない。entries[d].napMin は d-1 の昼寝で、その日の晩の気分は
-     * entries[d-1].moodE にある。fb 側だけを1日戻すと時点が揃う。
-     * 前日のエントリが無い日は対を作らない(先頭の日・記録が飛んだ日)。
+     * 相手を**翌日のエントリ**から取る対。当日を指す項目(昼寝・気分・水分)と、
+     * 翌朝に記録される項目(眠れた感・起床時刻)は**その一夜を挟んで並んでいても
+     * 別の日付キーに入る**ため、mk では対にできない。entries[d].napMin は d の昼寝で、
+     * その夜の眠れた感は entries[d+1].sleepFeel にある。fb 側だけを1日進めると時点が揃う。
+     * 翌日のエントリが無い日は対を作らない(末尾の日・記録が飛んだ日)。
      */
-    function mkPrev(fa, fb){
+    function mkNext(fa, fb){
       var ps=[];
       ks.forEach(function(k){
-        var p = S.entries[fmt(addDays(parseD(k), -1))];
-        if (!p) return;
-        var x=fa(S.entries[k]), y=fb(p);
+        var nx = S.entries[fmt(addDays(parseD(k), 1))];
+        if (!nx) return;
+        var x=fa(S.entries[k]), y=fb(nx);
         if (x!=null && y!=null) ps.push([x,y]);
       });
       return ps;
@@ -1637,18 +1687,20 @@ function viewReview(today){
       {l:"瞑想が達成ライン以上 × 眠れた感「良」", ps:mk(function(e){return e.meditationMin==null?null:e.meditationMin>=S.th.meditationMin;}, function(e){return e.sleepFeel==null?null:e.sleepFeel===0;})},
       {l:"瞑想が達成ライン以上 × 朝の気分「高」", ps:mk(function(e){return e.meditationMin==null?null:e.meditationMin>=S.th.meditationMin;}, function(e){return e.moodM==null?null:e.moodM===0;})},
       // 昼寝は達成ラインを持たないので、二値化は「した/していない」。0分を選んだ日が「していない」で、
-      // 未入力(null)は mk が両方揃った日だけを拾うので分母に入らない。
+      // 未入力(null)は両方揃った日だけを拾うので分母に入らない。
       // 対を眠れた感と朝の気分に置くのは瞑想と同じだが、期待する向きは逆でよい —
       // 睡眠圧を下げるぶん夜に響きうるのが昼寝の主なコストで、アプリで測れるのはそこだけ
-      // (日中の集中力・脳疲労の項目は持たないため、効いているかは測れない)
-      {l:"前日に昼寝した × 眠れた感「良」", ps:mk(function(e){return e.napMin==null?null:e.napMin>0;}, function(e){return e.sleepFeel==null?null:e.sleepFeel===0;})},
-      {l:"前日に昼寝した × 朝の気分「高」", ps:mk(function(e){return e.napMin==null?null:e.napMin>0;}, moodAM)},
+      // (日中の集中力・脳疲労の項目は持たないため、効いているかは測れない)。
+      // 昼寝は当日を指す(schema 22)ので、コスト側の相手はどちらも**翌日のエントリ**にある
+      {l:"昼寝した × その夜の眠れた感「良」", ps:mkNext(function(e){return e.napMin==null?null:e.napMin>0;}, function(e){return e.sleepFeel==null?null:e.sleepFeel===0;})},
+      {l:"昼寝した × 翌朝の気分「高」", ps:mkNext(function(e){return e.napMin==null?null:e.napMin>0;}, moodAM)},
       // 効果側(日中がどうだったか)に届く唯一の対。昼寝は当日の昼〜夕に起きるので、
       // 昼の気分では昼寝より前かもしれないが、晩なら確実に後になる。
+      // 昼寝と晩の気分はどちらも当日を指すので、この1本だけは同じエントリで対になる。
       // 晩の枠は別の機会にアプリを開かないと埋まらず、開くかどうか自体が調子と相関しうるので、
       // 朝×晩の対と同じく条件をラベルに出す。**この対は交絡を解かない** —
       // 疲れた日ほど昼寝するので、効果が実在しても φ は 0 か負に寄る(foot の注記が受ける)
-      {l:"前日に昼寝した × その日の晩の気分「高」(晩も記録した日だけ)", ps:mkPrev(function(e){return e.napMin==null?null:e.napMin>0;}, function(e){return e.moodE==null?null:e.moodE===0;})},
+      {l:"昼寝した × その日の晩の気分「高」(晩も記録した日だけ)", ps:mk(function(e){return e.napMin==null?null:e.napMin>0;}, function(e){return e.moodE==null?null:e.moodE===0;})},
       // 仕事は他の項目の上流にありうる。棚卸しで「ジムに行けない理由は仕事との摩擦」と出たので、
       // ここだけが「なぜそうなったか」に届く対になる
       {l:"仕事が重い × 前日に酒を飲んだ", ps:mk(function(e){return e.workLoad==null?null:e.workLoad===3;}, function(e){return e.sober==null?null:e.sober===false;})},
@@ -1830,7 +1882,7 @@ function viewSettings(){
   h += '</div></div>';
 
   h += '<p class="foot">データはこの端末のブラウザ(このアプリ)内にのみ保存されます。バックアップはJSONコピーで。'
-    + 'このアプリの役割は計測と週次フィードバックまで — 行動を変えるのは環境設計の仕事です。 v4.21</p>';
+    + 'このアプリの役割は計測と週次フィードバックまで — 行動を変えるのは環境設計の仕事です。 v4.22</p>';
   return h;
 }
 
