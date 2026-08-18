@@ -545,6 +545,28 @@ function weekStats(data, ws, today){
     });
     return a.sort(function(x,y){ return x-y; });
   }
+  // 真偽値の計測項目。達成判定を持たないので items には乗らず、度数分布でもない
+  // (dist はインデックス前提)。記録した日数と「true だった日数」の2つで足りる
+  function boolCount(f){
+    var yes=0, ent=0;
+    days.forEach(function(dt){
+      var v=(data.entries[dt]||{})[f];
+      if (typeof v === "boolean") { ent++; if (v) yes++; }
+    });
+    return {yes:yes, entered:ent};
+  }
+  // 体重の実数値。自由入力なので文字列で入っており、vals() の typeof number では拾えない。
+  // viewTrend と同じく Number + isFinite で出口を守る(NaN を渡すと読む側が壊れる)
+  function weightVals(){
+    var a=[];
+    days.forEach(function(dt){
+      var v=(data.entries[dt]||{}).weightVal;
+      if (v==null || v==="") return;
+      var n=Number(v);
+      if (isFinite(n)) a.push(n);
+    });
+    return a.sort(function(x,y){ return x-y; });
+  }
   var logged = days.filter(function(dt){ return dt<=today && data.entries[dt]; }).length;
   // 段数は選択肢配列から導く。書き写すと刻みを変えたとき最後の段が黙って集計から落ちる
   return {range: md(days[0])+"–"+md(days[6]), logged:logged, items:per,
@@ -553,6 +575,7 @@ function weekStats(data, ws, today){
     workLoad:dist("workLoad",LOAD_OPTS.length),
     sleepFeel:dist("sleepFeel",SLEEP_OPTS.length), stepsCount:vals("stepsCount"),
     companion:dist("companion",COMPANION_OPTS.length),
+    eatout:boolCount("eatout"), weightVal:weightVals(),
     mood:MOOD.parts.map(function(p){ return dist(p.id, MOOD_OPTS.length); })};
 }
 // カスタム項目のラベルは自由入力なので、カンマ/引用符/改行で列がずれないよう RFC4180 で囲う
@@ -613,6 +636,11 @@ function buildReviewText(data, today){
     + "(就寝は 24:00=1440 で、24時を超えた日は1440超。YouTube は視聴した分数)。\n"
     + "mood は["+MOOD.parts.map(function(p){return p.label;}).join(",")+"]の3枠ぶんの分布で、各枠が上の凡例の並びです。"
     + "気分は計測のみで達成判定の対象ではありません。"
+    // 週報テキスト全体に「未入力は失敗ではない」に相当する行が無かった(既存の穴)。
+    // entered / logged を渡している以上、読む側がここを取り違えると設計制約2が骨抜きになる
+    + "\n記録しなかった日は未入力であって失敗ではありません。entered(記録した日数)や "
+    + "logged(何か記録した日数)が小さい週を「サボった」と読まないでください。"
+    + "達成の分母は target(週の目標回数)で、記録しなかった日は数に入っていません。\n"
     + "ここで渡しているのはどの項目も1週間ぶんの分布か値の一覧だけで、日ごとの対応は入っていません。"
     + "「アシュワガンダを飲んだ日の翌朝の気分」のような日単位の突き合わせはこのデータからはできないので、"
     + "推測で書かないでください(日単位の相関はアプリ側の相関ヒントが受け持ちます)。\n"
@@ -620,6 +648,21 @@ function buildReviewText(data, today){
     + "companion(誰と過ごしたか)も計測のみで、順序も良し悪しもありません。"
     + "「ひとりが多い週は良くない」のような価値づけをせず、分布の事実として扱ってください。"
     + "相手の人数や名前は記録していません。\n"
+    + "eatout は前日に外食したかで、{yes:外食した日数, entered:記録した日数} です。"
+    + "目標を持たない計測のみで、外食の多い少ないを評価しないでください"
+    + "(食事の節制は別項目で、外食先でも節制はできます)。"
+    + "weightVal は体重の実数値を昇順に並べたものです(記録した日だけ)。"
+    // 体重は外部の基準を誰でも持ち出せる唯一の項目(BMI・理想体重)。waterMl に
+    // 「1日2L を持ち込まない」と書いたのと同じ理由で、より強く要る。
+    // 達成として数えているのは「測ったか」であって数値ではない、という区別も渡さないと伝わらない
+    + "weightVal は計測のみで達成判定を持ちません(達成として数えているのは「体重測定をしたか」で、"
+    + "数値そのものではありません)。BMI や理想体重のような外部の基準を持ち込まず、"
+    + "増減を目標にする提案もしないでください。"
+    // 日ごとの対応を渡していないことは下の総則で全項目について述べている。
+    // ここで強調付きに書くと、週報テキストで唯一の強調がデータの正確さの話に付き、
+    // 直前の「BMI を持ち込まない」より重く見える(重要度の序列が逆転する)。
+    // 外食×体重を名指しするのもやめる。eatout の目的は睡眠と気分で、体重ではない
+    + "どちらも週ぶんの一覧で、分布として述べるにとどめてください。\n"
     + "休肝日は酒を飲まなかった日として数えています。タンパク質は前日に規定量以上とれた日として数えています。"
     + "食事の節制と整腸剤・サプリは1日3回ぶんを記録し、"
     + "記録した回がすべて達成なら1日ぶんの達成です(記録しなかった回は数えません)。\n"
@@ -1061,8 +1104,11 @@ function viewLog(today){
     pairBtn("sober", e.sober!=null?e.sober:null, {t:"✓ 飲まなかった", f:"✗ 飲んだ"}));
   // 外食も達成判定を持たない。外食は良し悪しではなく、節制(meal)とも独立している
   // — 外食先でも節制はできる。中立色にするのは companion と同じ理由
+  // 記号も落とす。このコードベースは ✓ を「達成側の印」として使っており(pairBtn の既定は
+  // ✓ が on-pine)、すぐ上の休肝日は ✓ を良い側に保つためにラベルを反転させた項目。
+  // その直下に「外食 ✓ した」が並ぶと ✓ 側が目標に見える。色だけでなく記号でも評価しない
   if (en.eatout) y += row("外食","前日に外食したか",
-    pairBtn("eatout", e.eatout!=null?e.eatout:null, {t:"✓ した", f:"✗ していない"}, {neutral:true}));
+    pairBtn("eatout", e.eatout!=null?e.eatout:null, {t:"した", f:"していない"}, {neutral:true}));
   // 達成判定を持たない(制約6と同じ趣旨。誰と過ごすかは主観でも達成でもない)ので、
   // 評価色 pine / sienna を使わず全段を同色にする。色で「家族の方が良い」と言わせない
   if (en.companion) y += row("誰と","いちばん長く一緒にいた相手",

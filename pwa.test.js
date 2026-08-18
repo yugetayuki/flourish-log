@@ -1436,6 +1436,71 @@ describe("PWA v4.16: 外食(計測のみ)", () => {
     expect(f.CORE.some((c) => c.id === "eatout")).toBe(false);
   });
 
+  // 週報に載らないと、レビューを書く Claude 側は外食の存在を知り得ない
+  it("【後退ガード】週報データに外食と体重が入る", () => {
+    const f0 = boot().window.__flourish;
+    const d = f0.defaultData();
+    const ws = f0.weekStart(new Date("2026-07-06T00:00"));
+    for (let i = 0; i < 3; i++) {
+      const dt = new Date(ws);
+      dt.setDate(dt.getDate() + i);
+      d.entries[f0.fmt(dt)] = { eatout: i === 0, weight: true, weightVal: String(68 + i) };
+    }
+    const s = f0.weekStats(d, ws, f0.fmt(new Date("2026-07-12T00:00")));
+    expect(s.eatout).toEqual({ yes: 1, entered: 3 });
+    expect(s.weightVal).toEqual([68, 69, 70]);
+
+    const txt = f0.buildReviewText(d, f0.fmt(new Date("2026-07-12T00:00")));
+    expect(txt).toContain("eatout");
+    expect(txt).toContain("weightVal");
+    // 日ごとの対応は渡していないので、突き合わせを禁じる注記が要る
+    expect(txt).toContain("週ぶんの一覧で、分布として述べるにとどめて");
+    // 強調は週報テキストで使わない。使うと重要度の序列が実態とずれる
+    expect(txt).not.toContain("**");
+  });
+
+  // 計測のみの項目を週報へ渡すときは、解釈を縛る1文を必ず添える。
+  // 体重は外部の基準(BMI・理想体重)を誰でも持ち出せるので、これが無いと
+  // 【来週の一点】が最も具体的に書ける変数として無防備に置かれる
+  it("【後退ガード】体重に外部の基準を持ち込ませない注記がある", () => {
+    const f0 = boot().window.__flourish;
+    const txt = f0.buildReviewText(f0.defaultData(), f0.fmt(new Date("2026-07-12T00:00")));
+    expect(txt).toContain("BMI や理想体重のような外部の基準を持ち込まず");
+    expect(txt).toContain("達成として数えているのは「体重測定をしたか」");
+  });
+
+  it("【後退ガード】未入力を失敗と読ませない注記がある（制約2）", () => {
+    const f0 = boot().window.__flourish;
+    const txt = f0.buildReviewText(f0.defaultData(), f0.fmt(new Date("2026-07-12T00:00")));
+    expect(txt).toContain("記録しなかった日は未入力であって失敗ではありません");
+  });
+
+  it("体重が未記録・数値でない日は週報に混ざらない", () => {
+    const f0 = boot().window.__flourish;
+    const d = f0.defaultData();
+    const ws = f0.weekStart(new Date("2026-07-06T00:00"));
+    const day = (n) => { const dt = new Date(ws); dt.setDate(dt.getDate() + n); return f0.fmt(dt); };
+    d.entries[day(0)] = { weightVal: "68.5" };
+    d.entries[day(1)] = { weightVal: "" };
+    d.entries[day(2)] = { weightVal: "測ってない" };
+    d.entries[day(3)] = { eatout: true };
+    const s = f0.weekStats(d, ws, f0.fmt(new Date("2026-07-12T00:00")));
+    expect(s.weightVal).toEqual([68.5]);
+    expect(s.eatout).toEqual({ yes: 1, entered: 1 });
+  });
+
+  // ✓ は「達成側の印」として使われているので、計測のみの項目には付けない
+  it("【後退ガード】ラベルに ✓ / ✗ を使わない", () => {
+    const dom = boot();
+    const card = qa(dom, ".card").find((el) => el.textContent.includes("昨日"));
+    const row = card.innerHTML.split('data-f="eatout"');
+    expect(row.length).toBeGreaterThan(1);
+    const labels = qa(dom, '[data-f="eatout"]').map((b) => b.textContent);
+    expect(labels).toEqual(["した", "していない"]);
+    // 休肝日は従来どおり ✓ を保つ(中立化が全体に漏れていないこと)
+    expect(byText(dom, "button.sb", "✓ 飲まなかった")).toBeTruthy();
+  });
+
   // 評価色を付けると画面が「外食は悪い」と言ってしまう(companion と同じ理由)
   it("【後退ガード】選んでも評価色(on-pine)が付かない", () => {
     const dom = boot();
