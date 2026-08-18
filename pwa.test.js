@@ -1564,6 +1564,8 @@ describe("PWA v4.21: 昼寝(計測のみ)", () => {
     const view = q(dom, "#view").textContent;
     expect(view).toContain("相関であって因果ではありません");
     expect(view).not.toContain("前日に昼寝した");
+    // 注記は2文あるので、負の側も2本置く。片方だけだと、もう片方を条件の外へ出しても落ちない
+    expect(view).not.toContain("日中の集中力・脳疲労は測っていません");
     expect(view).not.toContain("効果が無いという意味ではありません");
   });
 
