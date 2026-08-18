@@ -174,7 +174,7 @@ check("再読み込みで Service Worker の管理下に入る", await page.eval
 // 経過を待つ代わりに、保存された開始時刻を過去へずらして時間の経過を作る
 await page.goto(base);
 await page.getByRole("button", { name: "タイマー" }).click();
-await page.getByRole("button", { name: "▶ 開始" }).click();
+await page.getByRole("button", { name: "▶ 勉強" }).click();
 const tRunning = await page.evaluate(() => localStorage.getItem("flourish-log-v2-timer"));
 check("タイマーの開始時刻が別キーに残る", !!tRunning && JSON.parse(tRunning).startedAt > 0);
 check("本体データにタイマーの状態を混ぜない",
@@ -215,6 +215,28 @@ check("停止前は studyMin が書かれていない", beforeStop === 0, "実�
 // 記録タブに混ぜない（朝の入力の動線を汚さない）
 await page.getByRole("button", { name: "記録" }).click();
 check("記録タブにタイマーが出ない", !(await page.textContent("#view")).includes("停止して記録"));
+
+// 種別の分岐を実ブラウザでも通す。瞑想は別フィールドへ入り、勉強を増やさない
+await page.goto(base);
+await page.getByRole("button", { name: "タイマー" }).click();
+await page.getByRole("button", { name: "▶ 瞑想" }).click();
+check("走行中は開始ボタンが消える",
+  (await page.getByRole("button", { name: "▶ 瞑想" }).count()) === 0);
+await page.evaluate(() => {
+  const t = JSON.parse(localStorage.getItem("flourish-log-v2-timer"));
+  t.startedAt -= 12 * 60000;
+  localStorage.setItem("flourish-log-v2-timer", JSON.stringify(t));
+});
+await page.reload();
+await page.getByRole("button", { name: "タイマー" }).click();
+await page.getByRole("button", { name: "■ 停止して記録" }).click();
+const medDays = await page.evaluate(() => {
+  const d = JSON.parse(localStorage.getItem("flourish-log-v2"));
+  return Object.keys(d.entries).map((k) => k + ":" + d.entries[k].meditationMin + "/" + d.entries[k].studyMin).join(",");
+});
+// 前段の勉強25分が同じ日に残っているので、「瞑想が入って勉強が動いていない」を1つの式で見る。
+// 加算先を studyMin 固定に戻すと 0/37 になって落ちる
+check("瞑想は meditationMin に入り、studyMin を増やさない", medDays.includes(":12/25"), medDays);
 
 await context.setOffline(true);
 let offline = "";
