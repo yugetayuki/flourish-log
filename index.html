@@ -135,7 +135,7 @@ svg{display:block}
 <body>
 <div id="wrap">
   <header>
-    <div class="title"><h1>Aubade</h1><span class="eyebrow mono">DAWN&nbsp;LOG&nbsp;·&nbsp;v4.18</span></div>
+    <div class="title"><h1>Aubade</h1><span class="eyebrow mono">DAWN&nbsp;LOG&nbsp;·&nbsp;v4.19</span></div>
     <span id="saveState"></span>
   </header>
   <div id="banner"></div>
@@ -1120,14 +1120,18 @@ function viewLog(today){
   // 就寝時刻と違い達成ラインを持たないので、超過を示す sienna は使わず睡眠系の indigo で統一する
   if (en.wakeMin) morn += row("起床時刻","布団を出た時刻",
     minSelect("wakeMin", WAKE_MIN, e.wakeMin!=null?e.wakeMin:null, fmtHM));
-  if (en.sleepFeel) morn += row("眠れた感","主観でOK",
-    seg("sleepFeel", SLEEP_OPTS, e.sleepFeel!=null?e.sleepFeel:null, ["on-pine","on-gray","on-sienna"]));
   // 就寝と起床から導けるので保存しない(持つと二重になってずれる)。達成ラインも持たない——
   // 就寝時刻に既にラインがあり、睡眠時間にも置くと同じ夜の行動を1日に2回未達判定することになる。
   // 片方だけの日は行ごと出さない(空欄の行は未入力の入力欄に見え、設計制約2に触れる)。
-  // **眠れた感より下に置く。** 上に置くと数値を見た直後に主観を答える順になり、眠れた感が
-  // 数値の追認になりうる。睡眠時間が導かれる「就寝×眠れた感」「起床×眠れた感」だけでなく、
-  // **眠れた感を含むペアは defs に10本ある**ので、汚染するとその全部の独立性が落ちる
+  // **起床時刻の直後、眠れた感の上に置く(オーナー判断 2026-08-18)。**
+  // v4.18 では一度これを眠れた感の下へ移した。理由は「数値を見た直後に主観を答える順になると、
+  // 眠れた感が数値の追認になりうる」で、眠れた感を含む相関ペアは defs に10本ある。
+  // ただし**順序を下げても解消は部分的**だった——起床時刻は眠れた感の直上にあり、
+  // 起床を選んだ時点で再描画が走って睡眠時間の行が同じカード内に現れるので、
+  // 同時に見えること自体は変わらない(guardrail-reviewer の指摘)。
+  // 部分的な効果と引き換えに「入れた直後に見える」という要望を落とすより、上へ戻すことをオーナーが選んだ。
+  // **下へ戻さないこと。** 汚染が実際に問題だと分かったら、順序ではなく
+  // 「眠れた感が埋まるまで出さない」など別の手段で解く(オーナーに相談してから)。
   if (en.bedtimeMin && en.wakeMin) {
     var sm = sleepMin(e.bedtimeMin, e.wakeMin);
     if (sm !== null) {
@@ -1136,6 +1140,8 @@ function viewLog(today){
         '<span class="mono" style="font-size:16px">'+esc((approx ? "約" : "") + fmtSleep(sm))+'</span>');
     }
   }
+  if (en.sleepFeel) morn += row("眠れた感","主観でOK",
+    seg("sleepFeel", SLEEP_OPTS, e.sleepFeel!=null?e.sleepFeel:null, ["on-pine","on-gray","on-sienna"]));
   if (en.coffee) morn += row("朝コーヒー","", pairBtn("coffee", e.coffee!=null?e.coffee:null));
   if (en.creatine) morn += row("クレアチン","コーヒーの横に", pairBtn("creatine", e.creatine!=null?e.creatine:null));
   if (en.weight) {
@@ -1761,7 +1767,7 @@ function viewSettings(){
   h += '</div></div>';
 
   h += '<p class="foot">データはこの端末のブラウザ(このアプリ)内にのみ保存されます。バックアップはJSONコピーで。'
-    + 'このアプリの役割は計測と週次フィードバックまで — 行動を変えるのは環境設計の仕事です。 v4.18</p>';
+    + 'このアプリの役割は計測と週次フィードバックまで — 行動を変えるのは環境設計の仕事です。 v4.19</p>';
   return h;
 }
 
