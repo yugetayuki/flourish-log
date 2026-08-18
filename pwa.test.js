@@ -1343,6 +1343,43 @@ describe("PWA v4.18: 昼寝(計測のみ)", () => {
     expect(view).toContain("関係が出なくても、効果が無いという意味ではありません");
   });
 
+  // 【後退ガード】注記の条件は enabled ではなく「行が実際に出たか」。
+  // defs は enabled を見ないので、表示トグルを off にすると行だけ残って注記が消える
+  // (守る対象が画面に残ったまま守りが外れる)
+  it("【後退ガード】表示トグルを off にしても、行が出る限り注記も出る", () => {
+    const f0 = boot().window.__flourish;
+    const d = f0.defaultData();
+    d.enabled.napMin = false;
+    for (let i = 0; i < 28; i++) {
+      const dt = new Date("2026-07-01T00:00");
+      dt.setDate(dt.getDate() + i);
+      d.entries[f0.fmt(dt)] = { napMin: i % 2 === 0 ? 20 : 0, sleepFeel: i % 2 === 0 ? 2 : 0, moodM: i % 2 === 0 ? 2 : 0 };
+    }
+    const dom = boot(JSON.stringify(d));
+    byText(dom, "button.tb", "週報").click();
+    const view = q(dom, "#view").textContent;
+    expect(view).toContain("前日に昼寝した × 眠れた感「良」");
+    expect(view).toContain("関係が出なくても、効果が無いという意味ではありません");
+  });
+
+  // 逆向き。昼寝の行が1本も出ない週に注記だけが残ると、何を指しているか分からない
+  it("【後退ガード】昼寝の行が出ない状態では注記も出ない", () => {
+    const f0 = boot().window.__flourish;
+    const d = f0.defaultData();
+    for (let i = 0; i < 28; i++) {
+      const dt = new Date("2026-07-01T00:00");
+      dt.setDate(dt.getDate() + i);
+      // 昼寝は記録せず、就寝と眠れた感だけ揃える(昼寝以外の行は出る)
+      d.entries[f0.fmt(dt)] = { bedtimeMin: i % 2 === 0 ? 1500 : 1380, sleepFeel: i % 2 === 0 ? 2 : 0 };
+    }
+    const dom = boot(JSON.stringify(d));
+    byText(dom, "button.tb", "週報").click();
+    const view = q(dom, "#view").textContent;
+    expect(view).toContain("相関であって因果ではありません");
+    expect(view).not.toContain("前日に昼寝した");
+    expect(view).not.toContain("効果が無いという意味ではありません");
+  });
+
   // 【後退ガード】真上の瞑想が「10分以上で達成」の同形の行なので、注記が無いと
   // 昼寝にも達成ラインがあるように見える(業務時間・仕事の重さと同じ明示)
   it("【後退ガード】記録タブの注記に「計測のみ」がある", () => {
