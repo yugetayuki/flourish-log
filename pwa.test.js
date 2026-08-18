@@ -1306,7 +1306,10 @@ describe("PWA v4.18: 昼寝(計測のみ)", () => {
     expect(t).toContain("napMin は昼寝した分の実値");
     expect(t).toContain("目標を持たない計測のみで、多い少ないを評価しないでください");
     expect(t).toContain("外部の基準を持ち込まないでください");
-    expect(t).toContain("瞑想とは別の項目です");
+    expect(t).toContain("瞑想とは別の項目なので合算しないでください");
+    // 分けた理由(夜の睡眠に逆向きに効きうる)を渡すと、直前の「評価しないで」と逆向きの
+    // プライミングになり、【来週の一点】に「昼寝を短くする」が出る経路が開く
+    expect(t).not.toContain("逆向きに効きうる");
   });
 
   // 【後退ガード】相関ヒントの defs は手書きで、足し忘れても何も落ちない(静かに欠ける)。
@@ -1318,6 +1321,36 @@ describe("PWA v4.18: 昼寝(計測のみ)", () => {
     expect(html).toMatch(/e\.napMin==null\?null:e\.napMin>0/);
     // 達成ラインを参照していたら、th.napMin を足した誰かが向きの逆な判定を持ち込んでいる
     expect(html).not.toMatch(/th\.napMin/);
+  });
+
+  // 28日ロック(制約4)は外さないので、28日ぶん積んでから週報タブで見る。
+  // 対は2本ともコスト側(夜の睡眠・朝の気分)で、日中の集中力を測る項目が無いため
+  // 効果側は構造的に出ない。注記が無いと、負の値だけを見て片側で判断することになる
+  it("【後退ガード】相関ヒントが描画され、効果側を測っていない旨の注記が出る", () => {
+    const f0 = boot().window.__flourish;
+    const d = f0.defaultData();
+    for (let i = 0; i < 28; i++) {
+      const dt = new Date("2026-07-01T00:00");
+      dt.setDate(dt.getDate() + i);
+      // 昼寝した日は眠れず気分も低い、という完全な相関を作る(φ=1.00 になる)
+      d.entries[f0.fmt(dt)] = { napMin: i % 2 === 0 ? 20 : 0, sleepFeel: i % 2 === 0 ? 2 : 0, moodM: i % 2 === 0 ? 2 : 0 };
+    }
+    const dom = boot(JSON.stringify(d));
+    byText(dom, "button.tb", "週報").click();
+    const view = q(dom, "#view").textContent;
+    expect(view).toContain("前日に昼寝した × 眠れた感「良」");
+    expect(view).toContain("前日に昼寝した × 朝の気分「高」");
+    expect(view).toContain("関係が出なくても、効果が無いという意味ではありません");
+  });
+
+  // 【後退ガード】真上の瞑想が「10分以上で達成」の同形の行なので、注記が無いと
+  // 昼寝にも達成ラインがあるように見える(業務時間・仕事の重さと同じ明示)
+  it("【後退ガード】記録タブの注記に「計測のみ」がある", () => {
+    const dom = boot();
+    const card = qa(dom, ".card").find((el) => el.textContent.includes("昨日"));
+    expect(card.textContent).toContain("昼寝");
+    const label = qa(dom, ".row").find((el) => el.textContent.startsWith("昼寝"));
+    expect(label.textContent).toContain("計測のみ");
   });
 
   // 追加のみなので値の変換は要らない。既存の日を書き換えないことを見る
