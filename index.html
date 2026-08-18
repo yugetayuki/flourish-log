@@ -135,7 +135,7 @@ svg{display:block}
 <body>
 <div id="wrap">
   <header>
-    <div class="title"><h1>Aubade</h1><span class="eyebrow mono">DAWN&nbsp;LOG&nbsp;·&nbsp;v4.17</span></div>
+    <div class="title"><h1>Aubade</h1><span class="eyebrow mono">DAWN&nbsp;LOG&nbsp;·&nbsp;v4.18</span></div>
     <span id="saveState"></span>
   </header>
   <div id="banner"></div>
@@ -178,6 +178,39 @@ function fmtHM(v){ return Math.floor(v/60) + ":" + pad(v%60); }
 // YouTube は時刻ではなく時間量なので時計表記にしない。推移タブの左余白(44px)に収まる短さも要件
 function fmtDur(v){ return v < 60 ? v + "分" : (v % 60 === 0 ? (v/60) + "h" : (v/60).toFixed(1) + "h"); }
 function fmtMl(v){ return v < 1000 ? v + "ml" : (v % 1000 === 0 ? (v/1000) + "L" : (v/1000).toFixed(1) + "L"); }
+// 睡眠時間は fmtDur を使わない(435 が "7.3h" になり、寝た長さとしては読み取りにくい)
+function fmtSleep(v){ var m = v % 60; return Math.floor(v/60) + "時間" + (m ? m + "分" : ""); }
+/**
+ * 就寝(前夜)と起床(当朝)は同じ日付キーに入るので、就寝側に1日足して引くだけで長さが出る。
+ * 25:12 のような24時超の値もそのまま扱える。
+ * **取り込みJSONは entries を素通しする**ので、手で編集した任意の値が来うる。
+ * 成立しない値では null を返し、呼び出し側に行ごと描かせない
+ * (weightVal を isFinite で止めているのと同じ考え方)。
+ * 上限は選択肢の両端から導く(最も早い就寝と最も遅い起床の組)。数値を直に書くと、
+ * 選択肢の範囲を広げたときにここだけ古いまま残る。下限は「短い睡眠」自体は成立するので 0 で切る。
+ */
+function sleepMin(bed, wake){
+  if (typeof bed !== "number" || typeof wake !== "number" || !isFinite(bed) || !isFinite(wake)) return null;
+  var v = wake + 1440 - bed;
+  var max = WAKE_MIN[WAKE_MIN.length-1] + 1440 - BEDTIME_MIN[0];
+  return (v <= 0 || v > max) ? null : v;
+}
+/**
+ * その日の就寝・起床が v9 の移行値でありうるか。**値だけでは判定できない。**
+ * BT_MIN9 / WK_MIN9 の変換先は開区間の 25:12 と 8:12 を除くと
+ * 23:00 / 23:30 / 24:00 / 24:30 / 6:00 / 6:30 / 7:00 / 7:30 で、**どれも select で選べる**。
+ * 「15分格子に乗らないこと」を印にすると5バケット中4つを取りこぼす(guardrail-reviewer の指摘)。
+ * そこで日付で切る。v4.0(schema 9)のリリースは 2026-08-16 なので、その日までの記録は
+ * 移行を通った可能性があり、翌日以降は select で選んだ実値しかありえない。
+ * 遡及入力で入れ直した日にも「約」が付くが、**誤る向きが安全側**(実測を概算と呼ぶだけで、
+ * 変換値を実測として断定しない)。この日以降の記録には一切付かないので自然に消える。
+ * 格子外の判定も OR で残す。取り込みJSON経由なら今後も格子外の値が入りうるため。
+ */
+var REAL_TIME_SINCE = "2026-08-17";
+function isApproxTime(v){ return typeof v === "number" && v % 15 !== 0; }
+function isApproxSleep(dateKey, bed, wake){
+  return dateKey < REAL_TIME_SINCE || isApproxTime(bed) || isApproxTime(wake);
+}
 // 達成ラインを持たない項目なので、週タブでは達成色/注意色ではなく indigo の濃淡で早い→遅いを示す。
 // 分値は連続なので添字ではなく式で出す(選択肢の端から導出。移行で入った格子外の値も clamp で収まる)
 function wakeOpacity(v){
@@ -1089,6 +1122,20 @@ function viewLog(today){
     minSelect("wakeMin", WAKE_MIN, e.wakeMin!=null?e.wakeMin:null, fmtHM));
   if (en.sleepFeel) morn += row("眠れた感","主観でOK",
     seg("sleepFeel", SLEEP_OPTS, e.sleepFeel!=null?e.sleepFeel:null, ["on-pine","on-gray","on-sienna"]));
+  // 就寝と起床から導けるので保存しない(持つと二重になってずれる)。達成ラインも持たない——
+  // 就寝時刻に既にラインがあり、睡眠時間にも置くと同じ夜の行動を1日に2回未達判定することになる。
+  // 片方だけの日は行ごと出さない(空欄の行は未入力の入力欄に見え、設計制約2に触れる)。
+  // **眠れた感より下に置く。** 上に置くと数値を見た直後に主観を答える順になり、眠れた感が
+  // 数値の追認になりうる。睡眠時間が導かれる「就寝×眠れた感」「起床×眠れた感」だけでなく、
+  // **眠れた感を含むペアは defs に10本ある**ので、汚染するとその全部の独立性が落ちる
+  if (en.bedtimeMin && en.wakeMin) {
+    var sm = sleepMin(e.bedtimeMin, e.wakeMin);
+    if (sm !== null) {
+      var approx = isApproxSleep(sel, e.bedtimeMin, e.wakeMin);
+      morn += row("睡眠時間", approx ? "移行前の記録が含まれうるため概算" : "就寝と起床から計算",
+        '<span class="mono" style="font-size:16px">'+esc((approx ? "約" : "") + fmtSleep(sm))+'</span>');
+    }
+  }
   if (en.coffee) morn += row("朝コーヒー","", pairBtn("coffee", e.coffee!=null?e.coffee:null));
   if (en.creatine) morn += row("クレアチン","コーヒーの横に", pairBtn("creatine", e.creatine!=null?e.creatine:null));
   if (en.weight) {
@@ -1331,8 +1378,11 @@ function svgChart(rows, key, yMin, yMax, yTicks, refY, color){
   }
   return h + '</svg>';
 }
-// 就寝と起床を同じ時刻軸に載せ、その間隔で睡眠の長さを示す。長さを「◯時間」と数値では出さない。
-// 両端は選択肢の遅い側の端であって実測ではないので、断定するとバケット幅の誤差が見えなくなる
+// 就寝と起床を同じ時刻軸に載せ、その間隔で睡眠の長さを示す。
+// **ここに数値を並べないのは、28日ぶんの「◯時間」を横に並べても読めないため**で、
+// 値が信用できないからではない。v3.1 以前は「両端が選択肢の遅い側の端で実測ではない」ことを
+// 理由に数値を全面的に出していなかったが、v9(v4.0)で分の実値になりその理由は失効した。
+// 1日ぶんの睡眠時間は記録タブが数値で出す(移行値を含む日は「約」を付けて区別する)
 function svgSleep(rows){
   // 就寝(22:00〜26:00)と翌朝の起床(+24 で 29:00〜34:00)の両方を覆う。範囲は選択肢から導く
   var yMin=BEDTIME_MIN[0]/60-0.2, yMax=WAKE_MIN[WAKE_MIN.length-1]/60+24+0.2;
@@ -1711,7 +1761,7 @@ function viewSettings(){
   h += '</div></div>';
 
   h += '<p class="foot">データはこの端末のブラウザ(このアプリ)内にのみ保存されます。バックアップはJSONコピーで。'
-    + 'このアプリの役割は計測と週次フィードバックまで — 行動を変えるのは環境設計の仕事です。 v4.17</p>';
+    + 'このアプリの役割は計測と週次フィードバックまで — 行動を変えるのは環境設計の仕事です。 v4.18</p>';
   return h;
 }
 
@@ -2000,6 +2050,8 @@ window.__flourish = {
   fmtClock: fmtClock, timerPaint: timerPaint,
   timerTicking: function(){ return timerTick !== null; },
   fmtHM: fmtHM, fmtDur: fmtDur, fmtMl: fmtMl,
+  sleepMin: sleepMin, fmtSleep: fmtSleep, isApproxTime: isApproxTime, isApproxSleep: isApproxSleep,
+  REAL_TIME_SINCE: REAL_TIME_SINCE,
 };
 
 render();
