@@ -94,7 +94,7 @@ describe("PWA: 起動と基本描画", () => {
   // 表示名を変えても保存キーは据え置く。変えると既存の記録が読めなくなる
   it("保存キーは flourish-log-v2 のまま", () => {
     const dom = boot();
-    byText(dom, "button.sb", "✓ した").click();
+    q(dom, '[data-f="ashwagandha"][data-v="t"]').click();
     expect(dom.window.__flourish.KEY).toBe("flourish-log-v2");
     expect(dom.window.localStorage.getItem("flourish-log-v2")).not.toBe(null);
   });
@@ -103,7 +103,9 @@ describe("PWA: 起動と基本描画", () => {
 describe("PWA: 保存と復元", () => {
   it("タップ→localStorageに即保存され✓保存済みが出る", () => {
     const dom = boot();
-    byText(dom, "button.sb", "✓ した").click(); // 最初の「した」=アシュワガンダ
+    // 項目を名指しする。「最初の ✓ した」で拾っていたときはカードの並びに依存していて、
+    // 記録タブを並べ替えた途端に別の項目(ジム)を押していた
+    q(dom, '[data-f="ashwagandha"][data-v="t"]').click();
     const saved = JSON.parse(dom.window.localStorage.getItem(KEY));
     const today = dom.window.__flourish.fmt(new Date());
     expect(saved.entries[today].ashwagandha).toBe(true);
@@ -242,7 +244,7 @@ describe("PWA: 壊れた保存データを黙って消さない", () => {
   it("退避後にタップしても、退避された原本は上書きされない", () => {
     const dom = boot(BROKEN);
     const key = dom.window.__flourish.brokenKeys()[0];
-    byText(dom, "button.sb", "✓ した").click();
+    q(dom, '[data-f="ashwagandha"][data-v="t"]').click();
     expect(JSON.parse(dom.window.localStorage.getItem(KEY)).entries).not.toEqual({});
     expect(dom.window.localStorage.getItem(key)).toBe(BROKEN);
   });
@@ -265,7 +267,7 @@ describe("PWA: 壊れた保存データを黙って消さない", () => {
       };
     });
     expect(dom.window.__flourish.brokenKeys().length).toBe(0);
-    byText(dom, "button.sb", "✓ した").click();
+    q(dom, '[data-f="ashwagandha"][data-v="t"]').click();
     expect(q(dom, "#saveState").textContent).toBe("保存を停止中");
     expect(dom.window.localStorage.getItem(KEY)).toBe(BROKEN);
   });
@@ -393,7 +395,7 @@ describe("PWA: Service Worker", () => {
   it("Service Workerが無い環境でも起動して保存できる", () => {
     const dom = boot();
     expect(dom.window.navigator.serviceWorker).toBe(undefined); // JSDOM は実装を持たない
-    byText(dom, "button.sb", "✓ した").click();
+    q(dom, '[data-f="ashwagandha"][data-v="t"]').click();
     expect(dom.window.localStorage.getItem(KEY)).not.toBe(null);
   });
 
@@ -2452,7 +2454,7 @@ describe("PWA: PCへの同期(任意)", () => {
   it("未設定なら何も送らない", async () => {
     const dom = boot();
     const calls = stubFetch(dom, ok);
-    byText(dom, "button.sb", "✓ した").click();
+    q(dom, '[data-f="ashwagandha"][data-v="t"]').click();
     dom.window.__flourish.syncPush();
     await tick();
     expect(calls.length).toBe(0);
@@ -2520,7 +2522,7 @@ describe("PWA: PCへの同期(任意)", () => {
     expect(q(dom, "#syncline").textContent).toContain("同期できませんでした");
     // 保存は通常どおり続けられる
     byText(dom, "button.tb", "記録").click();
-    byText(dom, "button.sb", "✓ した").click();
+    q(dom, '[data-f="ashwagandha"][data-v="t"]').click();
     expect(JSON.parse(dom.window.localStorage.getItem("flourish-log-v2")).entries[f.fmt(new Date())].ashwagandha).toBe(true);
   });
 
@@ -2560,7 +2562,7 @@ describe("PWA: PCへの同期(任意)", () => {
     configure(dom, URL_OK, "t".repeat(32));
     useFakeTimers(dom);
     byText(dom, "button.tb", "記録").click();
-    byText(dom, "button.sb", "✓ した").click();
+    q(dom, '[data-f="ashwagandha"][data-v="t"]').click();
     expect(calls.length).toBe(0);
     await advance(dom, 4000);
     expect(calls.length).toBe(1);
@@ -2575,7 +2577,7 @@ describe("PWA: PCへの同期(任意)", () => {
     configure(dom, URL_OK, "t".repeat(32));
     useFakeTimers(dom);
     byText(dom, "button.tb", "記録").click();
-    byText(dom, "button.sb", "✓ した").click();
+    q(dom, '[data-f="ashwagandha"][data-v="t"]').click();
     await advance(dom, 2000);
     pickMin(dom, "bedtimeMin", "1380"); // 2回目の保存で待ち時間が延びる
     await advance(dom, 2000);
@@ -2589,7 +2591,7 @@ describe("PWA: PCへの同期(任意)", () => {
     const calls = stubFetch(dom, ok);
     configure(dom, URL_OK, "t".repeat(32));
     byText(dom, "button.tb", "記録").click();
-    byText(dom, "button.sb", "✓ した").click();
+    q(dom, '[data-f="ashwagandha"][data-v="t"]').click();
     pickMin(dom, "bedtimeMin", "1380");
     await tick();
     expect(calls.length).toBe(0); // 待ち時間の前には飛ばない
@@ -2699,7 +2701,7 @@ describe("PWA: 同期の取り扱いを壊さない", () => {
     const calls = stubFetch(dom, ok);
     configure(dom);
     byText(dom, "button.tb", "記録").click();
-    byText(dom, "button.sb", "✓ した").click();
+    q(dom, '[data-f="ashwagandha"][data-v="t"]').click();
     expect(calls.length).toBe(0);
     Object.defineProperty(dom.window.document, "visibilityState", { value: "hidden", configurable: true });
     dom.window.document.dispatchEvent(new dom.window.Event("visibilitychange"));
@@ -3659,9 +3661,11 @@ describe("PWA: 水分を当日へ移す(v18)", () => {
   it("明日ぶんを開くと当日カードの見出しが「明日の〜」になる", () => {
     const dom = boot();
     const titles = () => qa(dom, "#view .card .ctitle").map((el) => el.textContent);
-    expect(titles()).toEqual(["昨夜", "今朝", "昨日", "今日の水分", "今日の昼寝", "今日の食事", "今日のサプリ", "今日の気分"]);
+    // 完全一致で縛る。カード順に対する機械的なガードはここだけなので、
+    // arrayContaining へ緩めると順序が黙って戻せるようになる
+    expect(titles()).toEqual(["昨日", "昨夜", "今朝", "今日の水分", "今日の昼寝", "今日の食事", "今日のサプリ", "今日の気分"]);
     qa(dom, "[data-dn]").find((b) => b.dataset.dn === "1").click();
-    expect(titles()).toEqual(["今夜", "明日の朝", "今日", "明日の水分", "明日の昼寝", "明日の食事", "明日のサプリ", "明日の気分"]);
+    expect(titles()).toEqual(["今日", "今夜", "明日の朝", "明日の水分", "明日の昼寝", "明日の食事", "明日のサプリ", "明日の気分"]);
   });
 
   it("今日の画面のまま今日ぶんが保存される", () => {

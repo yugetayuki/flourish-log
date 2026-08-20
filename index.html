@@ -142,7 +142,7 @@ svg{display:block}
 <body>
 <div id="wrap">
   <header>
-    <div class="title"><h1>Aubade</h1><span class="eyebrow mono">DAWN&nbsp;LOG&nbsp;·&nbsp;v4.23</span></div>
+    <div class="title"><h1>Aubade</h1><span class="eyebrow mono">DAWN&nbsp;LOG&nbsp;·&nbsp;v4.24</span></div>
     <span id="saveState"></span>
   </header>
   <div id="banner"></div>
@@ -1177,6 +1177,53 @@ function viewLog(today){
     h += '<button class="hintbtn" data-nav="review">日曜です — 週報タブでデータをコピーしてClaudeへ</button>';
   }
 
+  // カードは上から下へ時間が進む順に並べる。前日の行動 → 前夜 → 当朝 → 当日。
+  // 以前は 昨夜 → 今朝 → 昨日 → 今日の… の順で、3枚目で1日戻っていた。
+  // **entries の持ち方は変えていない。** 動かしたのは描画の順序だけで、どのフィールドが
+  // どの時点を指すかは CLAUDE.md の「entriesの意味論」のまま(前日の行動は今も同じ日付キーに入る)。
+  // 明日ぶんを開いたときも 今日 → 今夜 → 明日の朝 → 明日の… で順行する。
+  // 並びは pwa.test.js の見出し完全一致テストが縛っている。下へ戻さないこと。
+  var y = '';
+  if (en.youtubeMin) y += row("YouTube","スクリーンタイムを転記",
+    minSelect("youtubeMin", YT_MIN, e.youtubeMin!=null?e.youtubeMin:null, fmtDur));
+  if (en.stepsCount) y += row("歩数","スマホの計測値を転記",
+    minSelect("stepsCount", STEPS_N, e.stepsCount!=null?e.stepsCount:null, fmtStepsOpt));
+  if (en.workMin) y += row("業務時間","目標は持たない(計測のみ)",
+    minSelect("workMin", WORK_MIN, e.workMin!=null?e.workMin:null, fmtDur));
+  // 「なし」は良し悪しの外にあるので評価色を付けない(軽い=pine / 重い=sienna はそのまま)
+  if (en.workLoad) y += row("仕事の重さ","主観でOK(計測のみ)",
+    seg("workLoad", LOAD_OPTS, e.workLoad!=null?e.workLoad:null, ["on-gray","on-pine","on-gray","on-sienna"]));
+  if (en.gym) y += row("ジム","", pairBtn("gym", e.gym!=null?e.gym:null));
+  if (en.sauna) y += row("サウナ","", pairBtn("sauna", e.sauna!=null?e.sauna:null));
+  // 「両方」が何を指すかはオーナーの定義に委ねる。アプリは中身を決めない(タンパク質の「規定量」と同じ)
+  if (en.bath) y += row("お風呂・肌ケア","両方そろって達成",
+    pairBtn("bath", e.bath!=null?e.bath:null, {t:"✓ 両方した", f:"✗ しなかった"}));
+  if (en.mouth) y += row("マウスケア","両方そろって達成",
+    pairBtn("mouth", e.mouth!=null?e.mouth:null, {t:"✓ 両方した", f:"✗ しなかった"}));
+  if (en.protein) y += row("タンパク質","規定量以上とれたか", pairBtn("protein", e.protein!=null?e.protein:null));
+  // 日付語はカード見出しが持つ。行のヒントに「昨日の」「前日に」を重ねると、
+  // 明日ぶんを開いて見出しが「今日」に変わったときに行だけ食い違う
+  if (en.studyMin) y += row("勉強","合計",
+    minSelect("studyMin", STUDY_MIN, e.studyMin!=null?e.studyMin:null, fmtDur));
+  if (en.meditationMin) y += row("瞑想","合計",
+    minSelect("meditationMin", MEDITATION_MIN, e.meditationMin!=null?e.meditationMin:null, fmtDur));
+  if (en.sober) y += row("休肝日","酒を飲んだか",
+    pairBtn("sober", e.sober!=null?e.sober:null, {t:"✓ 飲まなかった", f:"✗ 飲んだ"}));
+  // 外食も達成判定を持たない。外食は良し悪しではなく、節制(meal)とも独立している
+  // — 外食先でも節制はできる。中立色にするのは companion と同じ理由
+  // 記号も落とす。このコードベースは ✓ を「達成側の印」として使っており(pairBtn の既定は
+  // ✓ が on-pine)、すぐ上の休肝日は ✓ を良い側に保つためにラベルを反転させた項目。
+  // その直下に「外食 ✓ した」が並ぶと ✓ 側が目標に見える。色だけでなく記号でも評価しない
+  if (en.eatout) y += row("外食","外食したか",
+    pairBtn("eatout", e.eatout!=null?e.eatout:null, {t:"した", f:"していない"}, {neutral:true}));
+  // 達成判定を持たない(制約6と同じ趣旨。誰と過ごすかは主観でも達成でもない)ので、
+  // 評価色 pine / sienna を使わず全段を同色にする。色で「家族の方が良い」と言わせない
+  if (en.companion) y += row("誰と","いちばん長く一緒にいた相手",
+    seg("companion", COMPANION_OPTS, e.companion!=null?e.companion:null,
+        ["on-gray","on-gray","on-gray","on-gray"]));
+  S.custom.forEach(function(c){ y += row(c.label,"", pairBtn(c.id, e[c.id]!=null?e[c.id]:null)); });
+  h += '<div class="card"><div class="chead"><span class="ctitle">'+(ahead?'今日':'昨日')+'</span></div>'+y+'</div>';
+
   var night = '';
   if (en.bedtimeMin) night += row("就寝時刻","布団に入った時刻",
     minSelect("bedtimeMin", BEDTIME_MIN, e.bedtimeMin!=null?e.bedtimeMin:null, fmtHM));
@@ -1219,46 +1266,6 @@ function viewLog(today){
     morn += row("体重測定","", winner);
   }
   h += '<div class="card"><div class="chead"><span class="ctitle">'+(ahead?'明日の朝':'今朝')+'</span></div>'+morn+'</div>';
-
-  var y = '';
-  if (en.youtubeMin) y += row("YouTube","スクリーンタイムを転記",
-    minSelect("youtubeMin", YT_MIN, e.youtubeMin!=null?e.youtubeMin:null, fmtDur));
-  if (en.stepsCount) y += row("歩数","スマホの計測値を転記",
-    minSelect("stepsCount", STEPS_N, e.stepsCount!=null?e.stepsCount:null, fmtStepsOpt));
-  if (en.workMin) y += row("業務時間","目標は持たない(計測のみ)",
-    minSelect("workMin", WORK_MIN, e.workMin!=null?e.workMin:null, fmtDur));
-  // 「なし」は良し悪しの外にあるので評価色を付けない(軽い=pine / 重い=sienna はそのまま)
-  if (en.workLoad) y += row("仕事の重さ","主観でOK(計測のみ)",
-    seg("workLoad", LOAD_OPTS, e.workLoad!=null?e.workLoad:null, ["on-gray","on-pine","on-gray","on-sienna"]));
-  if (en.gym) y += row("ジム","", pairBtn("gym", e.gym!=null?e.gym:null));
-  if (en.sauna) y += row("サウナ","", pairBtn("sauna", e.sauna!=null?e.sauna:null));
-  // 「両方」が何を指すかはオーナーの定義に委ねる。アプリは中身を決めない(タンパク質の「規定量」と同じ)
-  if (en.bath) y += row("お風呂・肌ケア","両方そろって達成",
-    pairBtn("bath", e.bath!=null?e.bath:null, {t:"✓ 両方した", f:"✗ しなかった"}));
-  if (en.mouth) y += row("マウスケア","両方そろって達成",
-    pairBtn("mouth", e.mouth!=null?e.mouth:null, {t:"✓ 両方した", f:"✗ しなかった"}));
-  if (en.protein) y += row("タンパク質","規定量以上とれたか", pairBtn("protein", e.protein!=null?e.protein:null));
-  if (en.studyMin) y += row("勉強","昨日の合計",
-    minSelect("studyMin", STUDY_MIN, e.studyMin!=null?e.studyMin:null, fmtDur));
-  if (en.meditationMin) y += row("瞑想","昨日の合計",
-    minSelect("meditationMin", MEDITATION_MIN, e.meditationMin!=null?e.meditationMin:null, fmtDur));
-  if (en.sober) y += row("休肝日","前日に酒を飲んだか",
-    pairBtn("sober", e.sober!=null?e.sober:null, {t:"✓ 飲まなかった", f:"✗ 飲んだ"}));
-  // 外食も達成判定を持たない。外食は良し悪しではなく、節制(meal)とも独立している
-  // — 外食先でも節制はできる。中立色にするのは companion と同じ理由
-  // 記号も落とす。このコードベースは ✓ を「達成側の印」として使っており(pairBtn の既定は
-  // ✓ が on-pine)、すぐ上の休肝日は ✓ を良い側に保つためにラベルを反転させた項目。
-  // その直下に「外食 ✓ した」が並ぶと ✓ 側が目標に見える。色だけでなく記号でも評価しない
-  if (en.eatout) y += row("外食","前日に外食したか",
-    pairBtn("eatout", e.eatout!=null?e.eatout:null, {t:"した", f:"していない"}, {neutral:true}));
-  // 達成判定を持たない(制約6と同じ趣旨。誰と過ごすかは主観でも達成でもない)ので、
-  // 評価色 pine / sienna を使わず全段を同色にする。色で「家族の方が良い」と言わせない
-  if (en.companion) y += row("誰と","いちばん長く一緒にいた相手",
-    seg("companion", COMPANION_OPTS, e.companion!=null?e.companion:null,
-        ["on-gray","on-gray","on-gray","on-gray"]));
-  S.custom.forEach(function(c){ y += row(c.label,"", pairBtn(c.id, e[c.id]!=null?e[c.id]:null)); });
-  h += '<div class="card"><div class="chead"><span class="ctitle">'+(ahead?'今日':'昨日')+'</span></div>'+y+'</div>';
-
   // 水は1日かけて飲むので、他の項目のように翌朝まとめて思い出せない。指す時点を当日にして、
   // 飲むたびに合計を選び直す(前日を指したままだと今日ぶんを入れるのに明日の画面へ動く必要があった)
   if (en.waterMl) {
@@ -1889,7 +1896,7 @@ function viewSettings(){
   h += '</div></div>';
 
   h += '<p class="foot">データはこの端末のブラウザ(このアプリ)内にのみ保存されます。バックアップはJSONコピーで。'
-    + 'このアプリの役割は計測と週次フィードバックまで — 行動を変えるのは環境設計の仕事です。 v4.23</p>';
+    + 'このアプリの役割は計測と週次フィードバックまで — 行動を変えるのは環境設計の仕事です。 v4.24</p>';
   return h;
 }
 
