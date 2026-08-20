@@ -134,6 +134,12 @@ Claude.ai チャット上で要件定義〜v2.0まで開発された。本書は
     **選んで未達になる経路が存在しない**。広げる必要が無い。
     **`th` を 22:00 より下へ広げないこと** — そちらは未達が増える向きで、上の
     「逆向きのラチェット」に当たる。`pwa.test.js` の「達成ラインは30分刻みのまま、22:00 まで選べる」が縛っている。
+  - **端に「20時以前」「26時以降」のような開区間を置かない(2026-08-20 に再検討して不採用)。**
+    `bedtimeMin` は分の実値なので、開区間には実時刻でない値を1つ決める必要があり、
+    睡眠時間・推移・帯グラフ・週報・台帳がそれを本物の時刻として扱う。
+    **同じことを一度やって捨てている** — v9 以前の「24:30以降」で、実際に何時に寝たかが
+    記録から消えた(`WATER_ML` / `NAP_MIN` の天井のコメントが今もこの前例を引いている)。
+    範囲が足りないと感じたら、開区間ではなく**実値の範囲を広げる**こと。
 - **entriesの意味論(重要)**: キーの日付=「記録した朝」。フィールドが指す時点は
   前夜(bedtimeMin, ashwagandha)/ 当朝(wakeMin, sleepFeel, coffee, creatine, weight, weightVal)/
   前日(youtubeMin, stepsCount, workMin, workLoad, gym, studyMin, meditationMin, sauna, bath, mouth, protein, steps, sober, eatout, companion, カスタム)/
