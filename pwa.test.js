@@ -1754,6 +1754,17 @@ describe("PWA: ひとこと(その日の出来事)", () => {
     expect(q(dom, '[data-action="memo"]')).not.toBe(null);
   });
 
+  // iOS は font-size 16px 未満の入力欄にフォーカスすると画面を拡大し、focus を外しても戻らない。
+  // 以降の記録タブ全体が拡大したままになるので、書く欄は分入力の select(.msel)と同じく16pxで揃える。
+  // JSDOM は詳細度を見ず後勝ちで解くため、汎用の textarea 規則より後ろに .memo を置いて
+  // どちらの解き方でも同じ値になるようにしてある(実機側は npm run smoke が見る)
+  it("記入しても画面が拡大しない(16px以上)", () => {
+    const dom = boot();
+    q(dom, '[data-action="memo"]').click();
+    const px = parseFloat(dom.window.getComputedStyle(q(dom, "#memo")).fontSize);
+    expect(px).toBeGreaterThanOrEqual(16);
+  });
+
   it("開いて書くと保存され、リロードでも残る", () => {
     const dom = boot();
     const f = dom.window.__flourish;
@@ -3348,6 +3359,22 @@ describe("PWA: v9 スキーマ(就寝・起床・YouTube の分値化)", () => {
       expect(vals[0]).toBe("");
       expect(vals.slice(1)).toEqual(opts.map(String));
     });
+  });
+
+  // 20時台に布団へ入る日があるので下へ広げた(2026-08-20、オーナー要望)。実値保存なので
+  // 過去の記録の意味は動かず migrate は要らない。**天井(26:00)は動かさない** —
+  // 上を削ると遅く寝た日が天井に張り付き、実際の時刻が記録から消える(WATER_ML と同じ理屈)
+  it("就寝時刻は 20:00 から 26:00 まで15分刻みで選べる", () => {
+    const dom = boot();
+    const f = dom.window.__flourish;
+    expect(f.BEDTIME_MIN[0]).toBe(1200);
+    expect(f.BEDTIME_MIN[f.BEDTIME_MIN.length - 1]).toBe(1560);
+    f.BEDTIME_MIN.slice(1).forEach((v, i) => expect(v - f.BEDTIME_MIN[i]).toBe(15));
+    const s = q(dom, 'select[data-f="bedtimeMin"]');
+    expect([...s.options].map((o) => o.text)).toContain("20:00");
+    s.value = "1200";
+    s.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
+    expect(JSON.parse(dom.window.localStorage.getItem(KEY)).entries[f.fmt(new Date())]).toEqual({ bedtimeMin: 1200 });
   });
 
   // 移行で入った 1512(25:12) / 492(8:12) は15分格子に乗らない。option が無いと

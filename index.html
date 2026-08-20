@@ -63,9 +63,6 @@ h1{font-size:18px;font-weight:600;letter-spacing:.10em;margin:0}
 .on-sienna{background:var(--sienna)} .on-gray{background:#8A9388}
 .wv{margin-top:8px;width:100%;border:1px solid var(--line);background:var(--bg);
   border-radius:10px;padding:8px 12px;font-size:14px}
-/* box-sizing を指定しないと padding のぶん width:100% が親からはみ出す(input と違い textarea は
-   既定で content-box のまま効いてしまう)。resize:vertical は横に伸ばしてカードを壊させないため */
-.memo{box-sizing:border-box;resize:vertical;font-family:inherit;line-height:1.6}
 .datebar{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
 .navbtn{padding:8px 12px;border:1px solid var(--line);border-radius:10px;background:var(--card);font-size:15px}
 .navbtn:disabled{color:var(--dim)}
@@ -102,6 +99,12 @@ h1{font-size:18px;font-weight:600;letter-spacing:.10em;margin:0}
 .half>*{flex:1}
 textarea{width:100%;border:1px solid var(--line);background:var(--bg);border-radius:10px;
   padding:8px;font-size:11px;line-height:1.5}
+/* box-sizing を指定しないと padding のぶん width:100% が親からはみ出す(input と違い textarea は
+   既定で content-box のまま効いてしまう)。resize:vertical は横に伸ばしてカードを壊させないため。
+   font-size は .msel と同じ理由で16px — 16px 未満だと iOS が focus 時に画面をズームする。
+   汎用の textarea 規則より「後ろ」に置くのは詳細度ではなく順序で勝たせるため。JSDOM の
+   getComputedStyle は詳細度を見ず後勝ちで解くので、前に置くと実機とテストで結果が食い違う */
+.memo{box-sizing:border-box;resize:vertical;font-family:inherit;line-height:1.6;font-size:16px}
 .stp{display:flex;align-items:center;gap:8px}
 .stpb{width:32px;height:32px;border:1px solid var(--line);border-radius:10px;background:var(--bg);
   font-size:16px;font-weight:700}
@@ -156,7 +159,7 @@ function minRange(from, to, step){
   var a = []; for (var v = from; v <= to; v += step) a.push(v);
   return a;
 }
-var BEDTIME_MIN = minRange(1320, 1560, 15); // 22:00〜26:00
+var BEDTIME_MIN = minRange(1200, 1560, 15); // 20:00〜26:00
 var WAKE_MIN    = minRange(300, 600, 15);   // 5:00〜10:00
 var YT_MIN      = minRange(0, 480, 30);     // 0〜8h
 // 水分は ml の実値。上限は 4L まで取ってある — 天井に張り付くと実際の量が記録から消えるため
@@ -1461,7 +1464,7 @@ function svgChart(rows, key, yMin, yMax, yTicks, refY, color){
 // 理由に数値を全面的に出していなかったが、v9(v4.0)で分の実値になりその理由は失効した。
 // 1日ぶんの睡眠時間は記録タブが数値で出す(移行値を含む日は「約」を付けて区別する)
 function svgSleep(rows){
-  // 就寝(22:00〜26:00)と翌朝の起床(+24 で 29:00〜34:00)の両方を覆う。範囲は選択肢から導く
+  // 就寝(20:00〜26:00)と翌朝の起床(+24 で 29:00〜34:00)の両方を覆う。範囲は選択肢から導く
   var yMin=BEDTIME_MIN[0]/60-0.2, yMax=WAKE_MIN[WAKE_MIN.length-1]/60+24+0.2;
   var yTicks=[];
   for (var sv=Math.ceil(yMin); sv<=Math.floor(yMax); sv+=2) yTicks.push({v:sv, l:fmtHM((sv%24)*60)});

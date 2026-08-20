@@ -66,6 +66,12 @@ const wakeDay = wake.entries[Object.keys(wake.entries)[0]];
 check("起床時刻が select で分として保存される", wakeDay.wakeMin === 390, JSON.stringify(wakeDay));
 check("就寝時刻も同じ経路で保存される", wakeDay.bedtimeMin === 1410, JSON.stringify(wakeDay));
 
+// iOS は font-size 16px 未満の入力欄にフォーカスすると画面を拡大し、focus を外しても戻らない。
+// JSDOM は CSS の詳細度を見ず後勝ちで解くので、実際に効く値はここでしか確かめられない
+await page.getByRole("button", { name: "ひとことを書く（任意）" }).click();
+const memoPx = await page.evaluate(() => parseFloat(getComputedStyle(document.getElementById("memo")).fontSize));
+check("ひとこと欄が16px以上(iOSが画面を拡大しない)", memoPx >= 16, memoPx + "px");
+
 for (const tab of ["週", "推移", "週報", "設定"]) {
   await page.getByRole("button", { name: tab, exact: true }).click();
   const len = (await page.textContent("#view")).length;
