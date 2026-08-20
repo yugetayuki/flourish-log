@@ -190,7 +190,7 @@ describe("PWA: 週タブ・週報タブ", () => {
   it("週報タブ: 28日未満は相関ロック表示", () => {
     const dom = boot();
     byText(dom, "button.tb", "週報").click();
-    expect(q(dom, "#view").textContent).toContain("28日分の記録で解禁");
+    expect(q(dom, "#view").textContent).toContain("相関に使える記録が28日分で解禁");
   });
 });
 
@@ -889,6 +889,122 @@ describe("PWA: 相関ヒント", () => {
     expect(view).not.toContain("ジムをした");
     expect(view).not.toContain("勉強した");
     expect(qa(dom, "#view .row").length).toBe(4); // 揃っているのは就寝・起床・眠れた感の4対だけ
+  });
+});
+
+describe("PWA: 相関ヒントの28日ロック(制約4)", () => {
+  // 過去に固定した日付を使う。今日を起点にすると、未来日を数えないことを見るテストと混ざる
+  const day = (f, i) => { const t = new Date("2026-06-01T00:00"); t.setDate(t.getDate() + i); return f.fmt(t); };
+  // 相関に使う項目を持つ日。就寝 × 眠れた感 の対が成立するように振る
+  const rec = (i) => ({ bedtimeMin: i % 2 === 0 ? 1380 : 1512, sleepFeel: i % 2 === 0 ? 0 : 2 });
+  const seed = (f, days) => {
+    const d = f.defaultData();
+    for (let i = 0; i < days; i++) d.entries[day(f, i)] = rec(i);
+    return d;
+  };
+  const PAIR = "就寝が達成ライン内 × 眠れた感「良」";
+  const review = (data) => {
+    const dom = boot(JSON.stringify(data));
+    byText(dom, "button.tb", "週報").click();
+    return q(dom, "#view").textContent;
+  };
+
+  it("記録27日ではロックされたまま", () => {
+    const f = boot().window.__flourish;
+    const view = review(seed(f, 27));
+    expect(view).toContain("相関に使える記録が28日分で解禁");
+    expect(view).toContain("27/28");
+    expect(view).not.toContain(PAIR);
+  });
+
+  it("記録28日で解禁される(境界)", () => {
+    const f = boot().window.__flourish;
+    const view = review(seed(f, 28));
+    expect(view).not.toContain("相関に使える記録が28日分で解禁");
+    expect(view).toContain(PAIR);
+  });
+
+  // memo は相関ヒントのどの対にも出てこないので、書いた日は材料を持たない
+  it("memo だけの日を8件足しても解禁されない", () => {
+    const f = boot().window.__flourish;
+    const d = seed(f, 27);
+    for (let i = 27; i < 35; i++) d.entries[day(f, i)] = { memo: "書いただけの日" };
+    const view = review(d);
+    expect(view).toContain("相関に使える記録が28日分で解禁");
+    expect(view).toContain("27/28");
+    expect(view).not.toContain(PAIR);
+  });
+
+  // 実測の再現(実記録20日 + メモだけ4件 + 体重だけ4件 → n=20 の行が描かれた)
+  it("実記録20日にメモ4件・体重4件を足しても解禁されない", () => {
+    const f = boot().window.__flourish;
+    const d = seed(f, 20);
+    for (let i = 20; i < 24; i++) d.entries[day(f, i)] = { memo: "書いただけの日" };
+    for (let i = 24; i < 28; i++) d.entries[day(f, i)] = { weight: true, weightVal: "62.5" };
+    const view = review(d);
+    expect(view).toContain("20/28");
+    expect(view).not.toContain(PAIR);
+  });
+
+  // 数えるのは「相関に使う項目を1つ以上持つ日」で、対が揃った日ではない。
+  // 両方揃った日だけを数えると、片側しか埋めていない期間がロックの分母から静かに消える
+  it("相関に使う項目が片方だけの日も数える", () => {
+    const f = boot().window.__flourish;
+    const d = f.defaultData();
+    for (let i = 0; i < 28; i++) d.entries[day(f, i)] = { bedtimeMin: i % 2 === 0 ? 1380 : 1512 };
+    const view = review(d);
+    expect(view).not.toContain("相関に使える記録が28日分で解禁");
+    expect(view).toContain("計算できるペアがありません");
+  });
+
+  // 先取り入力は明日まで入る(v4.4)。まだ来ていない日は「記録28日分」に数えない
+  it("未来日の先取り入力は日数に数えない", () => {
+    const f = boot().window.__flourish;
+    const d = seed(f, 27);
+    const t = new Date();
+    t.setDate(t.getDate() + 1);
+    d.entries[f.fmt(t)] = rec(0);
+    const view = review(d);
+    expect(view).toContain("27/28");
+    expect(view).not.toContain(PAIR);
+  });
+
+  // migrate() は entries を素通しするので、取り込みJSONには null のエントリも入りうる。
+  // 対を作るときに素で触ると TypeError になり、週報タブが丸ごと描けなくなる(修正前は実際に落ちた)
+  it("null のエントリが混ざっていても週報タブが描ける", () => {
+    const f = boot().window.__flourish;
+    const d = seed(f, 28);
+    d.entries["2026-05-01"] = null;
+    expect(review(d)).toContain(PAIR);
+  });
+
+  // migrate() は entries を素通しするので、取り込みJSONからは空のエントリが何件でも入る
+  it("取り込んだJSONの空エントリ28件では解禁されない", () => {
+    const f0 = boot().window.__flourish;
+    const d = f0.defaultData();
+    for (let i = 0; i < 28; i++) d.entries[day(f0, i)] = {};
+    const dom = boot();
+    byText(dom, "button.tb", "設定").click();
+    q(dom, "#imp").value = JSON.stringify(d);
+    byText(dom, "button.ghost", "取り込む").click();
+    byText(dom, "button.tb", "週報").click();
+    const view = q(dom, "#view").textContent;
+    expect(view).toContain("相関に使える記録が28日分で解禁");
+    expect(view).toContain("0/28");
+  });
+
+  // 設定タブの数は書き出し・取り込みが運ぶエントリ数で、ロックの分母とは別の事実。
+  // 両方を「日分」で出していたとき、メモだけの日が混ざった端末で「30日分」と「27/28」が並び、
+  // どちらかが壊れているように見えた。片方を他方に合わせて数え直すのは誤り
+  it("設定タブはエントリ数を出し、相関ヒントの分母とは別に数える", () => {
+    const f = boot().window.__flourish;
+    const d = seed(f, 27);
+    for (let i = 27; i < 30; i++) d.entries[day(f, i)] = { memo: "書いただけの日" };
+    const dom = boot(JSON.stringify(d));
+    byText(dom, "button.tb", "設定").click();
+    expect(q(dom, "#view").textContent).toContain("エントリ 30件");
+    byText(dom, "button.tb", "週報").click();
+    expect(q(dom, "#view").textContent).toContain("27/28");
   });
 });
 

@@ -142,7 +142,7 @@ svg{display:block}
 <body>
 <div id="wrap">
   <header>
-    <div class="title"><h1>Aubade</h1><span class="eyebrow mono">DAWN&nbsp;LOG&nbsp;·&nbsp;v4.24</span></div>
+    <div class="title"><h1>Aubade</h1><span class="eyebrow mono">DAWN&nbsp;LOG&nbsp;·&nbsp;v4.25</span></div>
     <span id="saveState"></span>
   </header>
   <div id="banner"></div>
@@ -1651,98 +1651,120 @@ function viewReview(today){
     h += '<textarea readonly rows="5" id="revout">'+esc(revText)+'</textarea>';
   }
 
-  var n = Object.keys(S.entries).length;
+  var ks = Object.keys(S.entries);
+  /**
+   * 28日ロック(制約4)の分母になる日の印。**項目名の一覧を別に持たない** —
+   * 持つと対を足したときに片方だけ腐り、材料の無い日を数えたまま気づけない。
+   * 対を作る mk / mkNext が、値を読んだついでにその日付キーへ印を付ける。
+   */
+  var corrDays = {};
+  function note(k, x, y){ if (x!=null || y!=null) corrDays[k]=true; }
+  // entries は migrate を素通しするので、取り込みJSONから null のエントリが来うる。
+  // ロック中も defs を建てるようになった(下の n の材料が corrDays のため)ので、
+  // 素で触ると週報タブが丸ごと描けなくなる。値を読む手前で必ず {} に倒す
+  function mk(fa, fb){
+    var ps=[];
+    ks.forEach(function(k){
+      var e=S.entries[k]||{}, x=fa(e), y=fb(e);
+      note(k, x, y);
+      if (x!=null && y!=null) ps.push([x,y]);
+    });
+    return ps;
+  }
+  /**
+   * 相手を**翌日のエントリ**から取る対。当日を指す項目(昼寝・気分・水分)と、
+   * 翌朝に記録される項目(眠れた感・起床時刻)は**その一夜を挟んで並んでいても
+   * 別の日付キーに入る**ため、mk では対にできない。entries[d].napMin は d の昼寝で、
+   * その夜の眠れた感は entries[d+1].sleepFeel にある。fb 側だけを1日進めると時点が揃う。
+   * 翌日のエントリが無い日は対を作らない(末尾の日・記録が飛んだ日)。
+   */
+  function mkNext(fa, fb){
+    var ps=[];
+    ks.forEach(function(k){
+      var kn = fmt(addDays(parseD(k), 1));
+      var x=fa(S.entries[k]||{}), y=fb(S.entries[kn]||{});
+      // x と y は別の日付キーの値なので印も2回に分ける。note(k,x,y) にまとめると、
+      // 翌日にしか値が無い日まで k の材料として数えてしまう
+      note(k, x, null);
+      note(kn, null, y);
+      if (x!=null && y!=null) ps.push([x,y]);
+    });
+    return ps;
+  }
+  // 気分は3枠あるが、相関は朝の値だけを使う。前夜・当朝の要因と時間的に最も近く、
+  // 昼・晩は日中の出来事が挟まって向きが読めなくなるため(掘り下げは週報→Claude 側に置く)
+  function moodAM(e){ return e.moodM==null?null:e.moodM===0; }
+  // ロック中(n<28)も defs は建てる。n の材料である corrDays は mk / mkNext が対を作るついでに
+  // 付ける印なので、建てないと n が分からない。else の中へ戻すには項目名の一覧を別に持つしかなく、
+  // それは corrDays のコメントで捨てた選択肢(対を足したとき片方だけ腐る)
+  var defs=[
+    {l:"就寝が達成ライン内 × 眠れた感「良」", ps:mk(function(e){return e.bedtimeMin==null?null:e.bedtimeMin<=S.th.bedtimeMin;}, function(e){return e.sleepFeel==null?null:e.sleepFeel===0;})},
+    {l:"起床が〜6:30以内 × 眠れた感「良」", ps:mk(function(e){return e.wakeMin==null?null:e.wakeMin<=390;}, function(e){return e.sleepFeel==null?null:e.sleepFeel===0;})},
+    {l:"YouTube多め(〜2h以上) × 就寝が遅い", ps:mk(function(e){return e.youtubeMin==null?null:e.youtubeMin>60;}, function(e){return e.bedtimeMin==null?null:e.bedtimeMin>S.th.bedtimeMin;})},
+    {l:"アシュワガンダを飲んだ × 眠れた感「良」", ps:mk(function(e){return e.ashwagandha==null?null:e.ashwagandha===true;}, function(e){return e.sleepFeel==null?null:e.sleepFeel===0;})},
+    {l:"就寝が達成ライン内 × 起床が〜6:30以内", ps:mk(function(e){return e.bedtimeMin==null?null:e.bedtimeMin<=S.th.bedtimeMin;}, function(e){return e.wakeMin==null?null:e.wakeMin<=390;})},
+    {l:"ジムをした × 眠れた感「良」", ps:mk(function(e){return e.gym==null?null:e.gym===true;}, function(e){return e.sleepFeel==null?null:e.sleepFeel===0;})},
+    // 達成の判定は studyDone に一元化。旧データ(真偽値)と新データ(分)が混ざった期間でも
+    // 週タブと同じ結果になる。ここで e.study を直接見ると、移行後に相関ヒントだけ静かに欠ける
+    {l:"勉強した × YouTube多め", ps:mk(function(e){return studyDone(S, e);}, function(e){return e.youtubeMin==null?null:e.youtubeMin>60;})},
+    // 瞑想は主観状態との突き合わせのために足した項目なので、対も眠れた感と朝の気分に置く。
+    // 達成ラインは可変なので th を直接見る(閾値を変えると過去の対の意味も変わるのは他項目と同じ)
+    {l:"瞑想が達成ライン以上 × 眠れた感「良」", ps:mk(function(e){return e.meditationMin==null?null:e.meditationMin>=S.th.meditationMin;}, function(e){return e.sleepFeel==null?null:e.sleepFeel===0;})},
+    {l:"瞑想が達成ライン以上 × 朝の気分「高」", ps:mk(function(e){return e.meditationMin==null?null:e.meditationMin>=S.th.meditationMin;}, function(e){return e.moodM==null?null:e.moodM===0;})},
+    // 昼寝は達成ラインを持たないので、二値化は「した/していない」。0分を選んだ日が「していない」で、
+    // 未入力(null)は両方揃った日だけを拾うので分母に入らない。
+    // 対を眠れた感と朝の気分に置くのは瞑想と同じだが、期待する向きは逆でよい —
+    // 睡眠圧を下げるぶん夜に響きうるのが昼寝の主なコストで、アプリで測れるのはそこだけ
+    // (日中の集中力・脳疲労の項目は持たないため、効いているかは測れない)。
+    // 昼寝は当日を指す(schema 22)ので、コスト側の相手はどちらも**翌日のエントリ**にある
+    {l:"昼寝した × その夜の眠れた感「良」", ps:mkNext(function(e){return e.napMin==null?null:e.napMin>0;}, function(e){return e.sleepFeel==null?null:e.sleepFeel===0;})},
+    {l:"昼寝した × 翌朝の気分「高」", ps:mkNext(function(e){return e.napMin==null?null:e.napMin>0;}, moodAM)},
+    // 効果側(日中がどうだったか)に届く唯一の対。昼寝は当日の昼〜夕に起きるので、
+    // 昼の気分では昼寝より前かもしれないが、晩なら確実に後になる。
+    // 昼寝と晩の気分はどちらも当日を指すので、この1本だけは同じエントリで対になる。
+    // 晩の枠は別の機会にアプリを開かないと埋まらず、開くかどうか自体が調子と相関しうるので、
+    // 朝×晩の対と同じく条件をラベルに出す。**この対は交絡を解かない** —
+    // 疲れた日ほど昼寝するので、効果が実在しても φ は 0 か負に寄る(foot の注記が受ける)
+    {l:"昼寝した × その日の晩の気分「高」(晩も記録した日だけ)", ps:mk(function(e){return e.napMin==null?null:e.napMin>0;}, function(e){return e.moodE==null?null:e.moodE===0;})},
+    // 仕事は他の項目の上流にありうる。棚卸しで「ジムに行けない理由は仕事との摩擦」と出たので、
+    // ここだけが「なぜそうなったか」に届く対になる
+    {l:"仕事が重い × 前日に酒を飲んだ", ps:mk(function(e){return e.workLoad==null?null:e.workLoad===3;}, function(e){return e.sober==null?null:e.sober===false;})},
+    {l:"仕事が重い × 就寝が達成ライン外", ps:mk(function(e){return e.workLoad==null?null:e.workLoad===3;}, function(e){return e.bedtimeMin==null?null:e.bedtimeMin>S.th.bedtimeMin;})},
+    {l:"業務時間が8h超 × ジムをした", ps:mk(function(e){return e.workMin==null?null:e.workMin>480;}, function(e){return e.gym==null?null:e.gym===true;})},
+    // 休肝日・サウナ・歩数はいずれも前日を指すので、当朝の眠れた感とは同じ一夜を挟んで並ぶ
+    {l:"前日に酒を飲んだ × 眠れた感「良」", ps:mk(function(e){return e.sober==null?null:e.sober===false;}, function(e){return e.sleepFeel==null?null:e.sleepFeel===0;})},
+    // 外食も前日を指す。献立アプリ(hatchmenu)の履歴は日付を持たず突き合わせられないので、
+    // 「外食した日の夜がどうだったか」に届くのはこの2本だけ
+    {l:"前日に外食した × 眠れた感「良」", ps:mk(function(e){return e.eatout==null?null:e.eatout===true;}, function(e){return e.sleepFeel==null?null:e.sleepFeel===0;})},
+    {l:"サウナに入った × 眠れた感「良」", ps:mk(function(e){return e.sauna==null?null:e.sauna===true;}, function(e){return e.sleepFeel==null?null:e.sleepFeel===0;})},
+    {l:"歩数が達成ライン以上 × 眠れた感「良」", ps:mk(function(e){return e.stepsCount==null?null:e.stepsCount>=S.th.stepsCount;}, function(e){return e.sleepFeel==null?null:e.sleepFeel===0;})},
+    // ここから気分。眠れた感と対になる組を選んであるので、
+    // 「睡眠を経由して効いているのか、直接効いているのか」を並べて読める
+    {l:"朝コーヒーを飲んだ × 朝の気分「高」", ps:mk(function(e){return e.coffee==null?null:e.coffee===true;}, moodAM)},
+    {l:"アシュワガンダを飲んだ × 朝の気分「高」", ps:mk(function(e){return e.ashwagandha==null?null:e.ashwagandha===true;}, moodAM)},
+    {l:"眠れた感「良」× 朝の気分「高」", ps:mk(function(e){return e.sleepFeel==null?null:e.sleepFeel===0;}, moodAM)},
+    {l:"就寝が達成ライン内 × 朝の気分「高」", ps:mk(function(e){return e.bedtimeMin==null?null:e.bedtimeMin<=S.th.bedtimeMin;}, moodAM)},
+    {l:"前日に酒を飲んだ × 朝の気分「高」", ps:mk(function(e){return e.sober==null?null:e.sober===false;}, moodAM)},
+    {l:"前日に外食した × 朝の気分「高」", ps:mk(function(e){return e.eatout==null?null:e.eatout===true;}, moodAM)},
+    {l:"ジムをした × 朝の気分「高」", ps:mk(function(e){return e.gym==null?null:e.gym===true;}, moodAM)},
+    {l:"歩数が達成ライン以上 × 朝の気分「高」", ps:mk(function(e){return e.stepsCount==null?null:e.stepsCount>=S.th.stepsCount;}, moodAM)},
+    // 他項目との相関ではなく、朝のよさが夜まで保つかという日内の見方。
+    // 他の行と違い、分母が「晩にもアプリを開いた日」に自己選択される(朝の項目は
+    // 同じ入力で一緒に埋まるが、晩の枠は別の機会に開かないと埋まらない)。
+    // データからは取り除けないので、条件をラベルに出して読む側に見えるようにする
+    {l:"朝の気分「高」× 晩の気分「高」(晩も記録した日だけ)", ps:mk(moodAM, function(e){return e.moodE==null?null:e.moodE===0;})},
+  ];
+
+  // 制約4の28日ロック。数えるのは「相関に使う項目を1つ以上持つ、今日以前の日付キー」。
+  // 日付キーの数で数えると、メモだけ・体重だけの日や先取り入力の未来日まで1日として算入され、
+  // 相関の材料が無いまま行が描かれる(実測で 実記録20日 + メモ4件 + 体重4件 → n=20 の行が出た)
+  var n = Object.keys(corrDays).filter(function(k){ return k <= today; }).length;
   h += '<div class="card"><div class="chead"><span class="ctitle">相関ヒント</span></div>';
   if (n < 28) {
-    h += '<p style="font-size:13px;color:var(--sub);padding:10px 0">🔒 28日分の記録で解禁(現在 <span class="mono">'+n+'/28</span>)。少ないデータの相関はノイズです。</p>';
+    // 「記録」のままだと、水分・誰と・メモだけを入れた日に数字が動かないのを
+    // 「入力したのに認められない」と読める。数えているのが何かをラベルに出す
+    h += '<p style="font-size:13px;color:var(--sub);padding:10px 0">🔒 相関に使える記録が28日分で解禁(現在 <span class="mono">'+n+'/28</span>)。少ないデータの相関はノイズです。</p>';
   } else {
-    var ks = Object.keys(S.entries);
-    var es = ks.map(function(k){ return S.entries[k]; });
-    function mk(fa, fb){
-      var ps=[];
-      es.forEach(function(e){
-        var x=fa(e), y=fb(e);
-        if (x!=null && y!=null) ps.push([x,y]);
-      });
-      return ps;
-    }
-    /**
-     * 相手を**翌日のエントリ**から取る対。当日を指す項目(昼寝・気分・水分)と、
-     * 翌朝に記録される項目(眠れた感・起床時刻)は**その一夜を挟んで並んでいても
-     * 別の日付キーに入る**ため、mk では対にできない。entries[d].napMin は d の昼寝で、
-     * その夜の眠れた感は entries[d+1].sleepFeel にある。fb 側だけを1日進めると時点が揃う。
-     * 翌日のエントリが無い日は対を作らない(末尾の日・記録が飛んだ日)。
-     */
-    function mkNext(fa, fb){
-      var ps=[];
-      ks.forEach(function(k){
-        var nx = S.entries[fmt(addDays(parseD(k), 1))];
-        if (!nx) return;
-        var x=fa(S.entries[k]), y=fb(nx);
-        if (x!=null && y!=null) ps.push([x,y]);
-      });
-      return ps;
-    }
-    // 気分は3枠あるが、相関は朝の値だけを使う。前夜・当朝の要因と時間的に最も近く、
-    // 昼・晩は日中の出来事が挟まって向きが読めなくなるため(掘り下げは週報→Claude 側に置く)
-    function moodAM(e){ return e.moodM==null?null:e.moodM===0; }
-    var defs=[
-      {l:"就寝が達成ライン内 × 眠れた感「良」", ps:mk(function(e){return e.bedtimeMin==null?null:e.bedtimeMin<=S.th.bedtimeMin;}, function(e){return e.sleepFeel==null?null:e.sleepFeel===0;})},
-      {l:"起床が〜6:30以内 × 眠れた感「良」", ps:mk(function(e){return e.wakeMin==null?null:e.wakeMin<=390;}, function(e){return e.sleepFeel==null?null:e.sleepFeel===0;})},
-      {l:"YouTube多め(〜2h以上) × 就寝が遅い", ps:mk(function(e){return e.youtubeMin==null?null:e.youtubeMin>60;}, function(e){return e.bedtimeMin==null?null:e.bedtimeMin>S.th.bedtimeMin;})},
-      {l:"アシュワガンダを飲んだ × 眠れた感「良」", ps:mk(function(e){return e.ashwagandha==null?null:e.ashwagandha===true;}, function(e){return e.sleepFeel==null?null:e.sleepFeel===0;})},
-      {l:"就寝が達成ライン内 × 起床が〜6:30以内", ps:mk(function(e){return e.bedtimeMin==null?null:e.bedtimeMin<=S.th.bedtimeMin;}, function(e){return e.wakeMin==null?null:e.wakeMin<=390;})},
-      {l:"ジムをした × 眠れた感「良」", ps:mk(function(e){return e.gym==null?null:e.gym===true;}, function(e){return e.sleepFeel==null?null:e.sleepFeel===0;})},
-      // 達成の判定は studyDone に一元化。旧データ(真偽値)と新データ(分)が混ざった期間でも
-      // 週タブと同じ結果になる。ここで e.study を直接見ると、移行後に相関ヒントだけ静かに欠ける
-      {l:"勉強した × YouTube多め", ps:mk(function(e){return studyDone(S, e);}, function(e){return e.youtubeMin==null?null:e.youtubeMin>60;})},
-      // 瞑想は主観状態との突き合わせのために足した項目なので、対も眠れた感と朝の気分に置く。
-      // 達成ラインは可変なので th を直接見る(閾値を変えると過去の対の意味も変わるのは他項目と同じ)
-      {l:"瞑想が達成ライン以上 × 眠れた感「良」", ps:mk(function(e){return e.meditationMin==null?null:e.meditationMin>=S.th.meditationMin;}, function(e){return e.sleepFeel==null?null:e.sleepFeel===0;})},
-      {l:"瞑想が達成ライン以上 × 朝の気分「高」", ps:mk(function(e){return e.meditationMin==null?null:e.meditationMin>=S.th.meditationMin;}, function(e){return e.moodM==null?null:e.moodM===0;})},
-      // 昼寝は達成ラインを持たないので、二値化は「した/していない」。0分を選んだ日が「していない」で、
-      // 未入力(null)は両方揃った日だけを拾うので分母に入らない。
-      // 対を眠れた感と朝の気分に置くのは瞑想と同じだが、期待する向きは逆でよい —
-      // 睡眠圧を下げるぶん夜に響きうるのが昼寝の主なコストで、アプリで測れるのはそこだけ
-      // (日中の集中力・脳疲労の項目は持たないため、効いているかは測れない)。
-      // 昼寝は当日を指す(schema 22)ので、コスト側の相手はどちらも**翌日のエントリ**にある
-      {l:"昼寝した × その夜の眠れた感「良」", ps:mkNext(function(e){return e.napMin==null?null:e.napMin>0;}, function(e){return e.sleepFeel==null?null:e.sleepFeel===0;})},
-      {l:"昼寝した × 翌朝の気分「高」", ps:mkNext(function(e){return e.napMin==null?null:e.napMin>0;}, moodAM)},
-      // 効果側(日中がどうだったか)に届く唯一の対。昼寝は当日の昼〜夕に起きるので、
-      // 昼の気分では昼寝より前かもしれないが、晩なら確実に後になる。
-      // 昼寝と晩の気分はどちらも当日を指すので、この1本だけは同じエントリで対になる。
-      // 晩の枠は別の機会にアプリを開かないと埋まらず、開くかどうか自体が調子と相関しうるので、
-      // 朝×晩の対と同じく条件をラベルに出す。**この対は交絡を解かない** —
-      // 疲れた日ほど昼寝するので、効果が実在しても φ は 0 か負に寄る(foot の注記が受ける)
-      {l:"昼寝した × その日の晩の気分「高」(晩も記録した日だけ)", ps:mk(function(e){return e.napMin==null?null:e.napMin>0;}, function(e){return e.moodE==null?null:e.moodE===0;})},
-      // 仕事は他の項目の上流にありうる。棚卸しで「ジムに行けない理由は仕事との摩擦」と出たので、
-      // ここだけが「なぜそうなったか」に届く対になる
-      {l:"仕事が重い × 前日に酒を飲んだ", ps:mk(function(e){return e.workLoad==null?null:e.workLoad===3;}, function(e){return e.sober==null?null:e.sober===false;})},
-      {l:"仕事が重い × 就寝が達成ライン外", ps:mk(function(e){return e.workLoad==null?null:e.workLoad===3;}, function(e){return e.bedtimeMin==null?null:e.bedtimeMin>S.th.bedtimeMin;})},
-      {l:"業務時間が8h超 × ジムをした", ps:mk(function(e){return e.workMin==null?null:e.workMin>480;}, function(e){return e.gym==null?null:e.gym===true;})},
-      // 休肝日・サウナ・歩数はいずれも前日を指すので、当朝の眠れた感とは同じ一夜を挟んで並ぶ
-      {l:"前日に酒を飲んだ × 眠れた感「良」", ps:mk(function(e){return e.sober==null?null:e.sober===false;}, function(e){return e.sleepFeel==null?null:e.sleepFeel===0;})},
-      // 外食も前日を指す。献立アプリ(hatchmenu)の履歴は日付を持たず突き合わせられないので、
-      // 「外食した日の夜がどうだったか」に届くのはこの2本だけ
-      {l:"前日に外食した × 眠れた感「良」", ps:mk(function(e){return e.eatout==null?null:e.eatout===true;}, function(e){return e.sleepFeel==null?null:e.sleepFeel===0;})},
-      {l:"サウナに入った × 眠れた感「良」", ps:mk(function(e){return e.sauna==null?null:e.sauna===true;}, function(e){return e.sleepFeel==null?null:e.sleepFeel===0;})},
-      {l:"歩数が達成ライン以上 × 眠れた感「良」", ps:mk(function(e){return e.stepsCount==null?null:e.stepsCount>=S.th.stepsCount;}, function(e){return e.sleepFeel==null?null:e.sleepFeel===0;})},
-      // ここから気分。眠れた感と対になる組を選んであるので、
-      // 「睡眠を経由して効いているのか、直接効いているのか」を並べて読める
-      {l:"朝コーヒーを飲んだ × 朝の気分「高」", ps:mk(function(e){return e.coffee==null?null:e.coffee===true;}, moodAM)},
-      {l:"アシュワガンダを飲んだ × 朝の気分「高」", ps:mk(function(e){return e.ashwagandha==null?null:e.ashwagandha===true;}, moodAM)},
-      {l:"眠れた感「良」× 朝の気分「高」", ps:mk(function(e){return e.sleepFeel==null?null:e.sleepFeel===0;}, moodAM)},
-      {l:"就寝が達成ライン内 × 朝の気分「高」", ps:mk(function(e){return e.bedtimeMin==null?null:e.bedtimeMin<=S.th.bedtimeMin;}, moodAM)},
-      {l:"前日に酒を飲んだ × 朝の気分「高」", ps:mk(function(e){return e.sober==null?null:e.sober===false;}, moodAM)},
-      {l:"前日に外食した × 朝の気分「高」", ps:mk(function(e){return e.eatout==null?null:e.eatout===true;}, moodAM)},
-      {l:"ジムをした × 朝の気分「高」", ps:mk(function(e){return e.gym==null?null:e.gym===true;}, moodAM)},
-      {l:"歩数が達成ライン以上 × 朝の気分「高」", ps:mk(function(e){return e.stepsCount==null?null:e.stepsCount>=S.th.stepsCount;}, moodAM)},
-      // 他項目との相関ではなく、朝のよさが夜まで保つかという日内の見方。
-      // 他の行と違い、分母が「晩にもアプリを開いた日」に自己選択される(朝の項目は
-      // 同じ入力で一緒に埋まるが、晩の枠は別の機会に開かないと埋まらない)。
-      // データからは取り除けないので、条件をラベルに出して読む側に見えるようにする
-      {l:"朝の気分「高」× 晩の気分「高」(晩も記録した日だけ)", ps:mk(moodAM, function(e){return e.moodE==null?null:e.moodE===0;})},
-    ];
     var res = defs.filter(function(x){return x.ps.length>=14;})
       .map(function(x){var v=phi(x.ps); return {l:x.l, n:x.ps.length, v:v, s:strength(v, x.ps.length)};})
       // 同じ確かさなら記録日数の多い方を上に。φ の大小はその次(見かけの強さで上位を取らせない)
@@ -1847,8 +1869,11 @@ function viewSettings(){
   h += '<div class="addrow"><input id="newLabel" placeholder="例: 読書">'
     + '<button class="addbtn" data-action="addcustom">追加</button></div></div>';
 
+  // 相関ヒントの「n/28」とは別の数。ここは書き出し・取り込みが運ぶエントリ数で、
+  // メモだけ・体重だけの日も先取り入力の未来日も1件に数える。どちらも「日分」で出していたとき、
+  // 片方だけが動いた端末では「30日分」と「27/28」が並び、どちらかが壊れて見えた
   h += '<div class="card"><div class="chead"><span class="ctitle">データ</span>'
-    + '<span class="cright mono">'+Object.keys(S.entries).length+'日分</span></div>';
+    + '<span class="cright mono">エントリ '+Object.keys(S.entries).length+'件</span></div>';
   h += backupLine();
   h += '<div class="half"><button class="ghost" data-action="expcsv">CSVをコピー</button>'
     + '<button class="ghost" data-action="expjson">JSONをコピー</button></div>';
@@ -1896,7 +1921,7 @@ function viewSettings(){
   h += '</div></div>';
 
   h += '<p class="foot">データはこの端末のブラウザ(このアプリ)内にのみ保存されます。バックアップはJSONコピーで。'
-    + 'このアプリの役割は計測と週次フィードバックまで — 行動を変えるのは環境設計の仕事です。 v4.24</p>';
+    + 'このアプリの役割は計測と週次フィードバックまで — 行動を変えるのは環境設計の仕事です。 v4.25</p>';
   return h;
 }
 
@@ -2078,7 +2103,7 @@ document.addEventListener("click", function(ev){
       var parsed = JSON.parse(ta.value);
       if (!isPlainObject(parsed)) throw new Error("最上位がオブジェクトではありません");
       S = migrate(parsed);
-      save(); setNote = "取り込み完了(" + Object.keys(S.entries).length + "日分)"; setNoteOk = true;
+      save(); setNote = "取り込み完了(" + Object.keys(S.entries).length + "件)"; setNoteOk = true;
     } catch(e) {
       console.error("[flourish] 取り込みに失敗しました", e);
       setNote = "取り込み失敗: JSONを確認してください"; setNoteOk = false;
