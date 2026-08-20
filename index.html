@@ -63,6 +63,10 @@ h1{font-size:18px;font-weight:600;letter-spacing:.10em;margin:0}
 .on-sienna{background:var(--sienna)} .on-gray{background:#8A9388}
 .wv{margin-top:8px;width:100%;border:1px solid var(--line);background:var(--bg);
   border-radius:10px;padding:8px 12px;font-size:14px}
+/* 記録タブの体重の数値。.msel / .memo と同じで、16px 未満だと iOS が focus 時に画面を拡大する。
+   .wv 側を上げないのは同じ class が設定タブの同期URL・トークン欄にも掛かっているため
+   (朝の動線にあるのは体重だけで、設定タブは別の判断) */
+#wv{font-size:16px}
 .datebar{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
 .navbtn{padding:8px 12px;border:1px solid var(--line);border-radius:10px;background:var(--card);font-size:15px}
 .navbtn:disabled{color:var(--dim)}

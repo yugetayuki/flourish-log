@@ -1009,6 +1009,15 @@ describe("PWA: 体重の自由入力", () => {
     return [...svgs[svgs.length - 1].querySelectorAll("text")].map((t) => t.textContent).join(" ");
   };
 
+  // iOS は font-size 16px 未満の入力欄にフォーカスすると画面を拡大し、focus を外しても戻らない。
+  // 朝の動線にある自由入力はひとことと体重の2つで、どちらも16pxに揃えてある(実機は smoke が見る)
+  it("記入しても画面が拡大しない(16px以上)", () => {
+    const dom = boot();
+    q(dom, '[data-f="weight"][data-v="t"]').click();
+    const px = parseFloat(dom.window.getComputedStyle(q(dom, "#wv")).fontSize);
+    expect(px).toBeGreaterThanOrEqual(16);
+  });
+
   it("ドットが2つある入力は数値として読める先頭までに切り詰める", () => {
     const dom = boot();
     const f = dom.window.__flourish;

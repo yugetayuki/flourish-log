@@ -66,12 +66,6 @@ const wakeDay = wake.entries[Object.keys(wake.entries)[0]];
 check("起床時刻が select で分として保存される", wakeDay.wakeMin === 390, JSON.stringify(wakeDay));
 check("就寝時刻も同じ経路で保存される", wakeDay.bedtimeMin === 1410, JSON.stringify(wakeDay));
 
-// iOS は font-size 16px 未満の入力欄にフォーカスすると画面を拡大し、focus を外しても戻らない。
-// JSDOM は CSS の詳細度を見ず後勝ちで解くので、実際に効く値はここでしか確かめられない
-await page.getByRole("button", { name: "ひとことを書く（任意）" }).click();
-const memoPx = await page.evaluate(() => parseFloat(getComputedStyle(document.getElementById("memo")).fontSize));
-check("ひとこと欄が16px以上(iOSが画面を拡大しない)", memoPx >= 16, memoPx + "px");
-
 for (const tab of ["週", "推移", "週報", "設定"]) {
   await page.getByRole("button", { name: tab, exact: true }).click();
   const len = (await page.textContent("#view")).length;
@@ -174,6 +168,18 @@ check("Service Worker が登録され有効になる", swState === "active", swS
 
 await page.reload();
 check("再読み込みで Service Worker の管理下に入る", await page.evaluate(() => !!navigator.serviceWorker.controller));
+
+// iOS は font-size 16px 未満の入力欄にフォーカスすると画面を拡大し、focus を外しても戻らない。
+// JSDOM は CSS の詳細度を見ず後勝ちで解くので、実際に効く値はここでしか確かめられない。
+// **CSP の一連の検査より後ろに置くこと。** 前に置くと *.ts.net の2件が時々落ちる —
+// Service Worker がページを claim した後の POST は page.route を通らず実DNSへ出るためで、
+// CSP の検査までの間に操作を挟むほど claim が間に合ってしまう
+await page.getByRole("button", { name: "ひとことを書く（任意）" }).click();
+const memoPx = await page.evaluate(() => parseFloat(getComputedStyle(document.getElementById("memo")).fontSize));
+check("ひとこと欄が16px以上(iOSが画面を拡大しない)", memoPx >= 16, memoPx + "px");
+await page.locator('[data-f="weight"][data-v="t"]').click();
+const wvPx = await page.evaluate(() => parseFloat(getComputedStyle(document.getElementById("wv")).fontSize));
+check("体重の数値欄が16px以上(iOSが画面を拡大しない)", wvPx >= 16, wvPx + "px");
 
 // 勉強タイマー。JSDOM では「アプリを閉じている間も時間が進む」を再現できないので、
 // 実ブラウザで開始 → リロード（＝閉じて開き直しに相当）→ 停止まで通す。
