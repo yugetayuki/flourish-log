@@ -128,6 +128,12 @@ Claude.ai チャット上で要件定義〜v2.0まで開発された。本書は
   目標が選択肢の外にあると表現できないのが問題だった。刻みを15分にするのは別の判断で、混ぜないこと。
   15分単位で締め上げられる状態は完璧主義に対する逆向きのラチェットになるため(設計制約1の趣旨)。
   刻みを揃えたくなったらオーナーに相談すること。
+  - **入力側(`BEDTIME_MIN`)の範囲とは別物。** 入力は 2026-08-20 に 20:00〜26:00 へ広げたが、
+    達成ラインは 22:00〜24:30 のまま揃えていない。**揃え忘れではない。** 新設の 20:00〜21:45 は
+    `th` の最小(1320 = 22:00)より必ず小さく、`achieved` が `e.bedtimeMin <= th` なので
+    **選んで未達になる経路が存在しない**。広げる必要が無い。
+    **`th` を 22:00 より下へ広げないこと** — そちらは未達が増える向きで、上の
+    「逆向きのラチェット」に当たる。`pwa.test.js` の「達成ラインは30分刻みのまま、22:00 まで選べる」が縛っている。
 - **entriesの意味論(重要)**: キーの日付=「記録した朝」。フィールドが指す時点は
   前夜(bedtimeMin, ashwagandha)/ 当朝(wakeMin, sleepFeel, coffee, creatine, weight, weightVal)/
   前日(youtubeMin, stepsCount, workMin, workLoad, gym, studyMin, meditationMin, sauna, bath, mouth, protein, steps, sober, eatout, companion, カスタム)/
