@@ -1315,11 +1315,12 @@ describe("PWA: 瞑想(分の実値)", () => {
 
   it("記録タブに瞑想の select が出て、選ぶと分の実値が入る", () => {
     const dom = boot();
+    const f = dom.window.__flourish;
     const sel = q(dom, 'select[data-f="meditationMin"]');
     expect(sel).not.toBe(null);
     sel.value = "20";
     sel.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
-    expect(JSON.parse(dom.window.localStorage.getItem(KEY)).entries["2026-08-18"].meditationMin).toBe(20);
+    expect(JSON.parse(dom.window.localStorage.getItem(KEY)).entries[f.fmt(new Date())].meditationMin).toBe(20);
   });
 
   // 達成ラインの向きは項目ごとに違う。瞑想は「この値以上で達成」(勉強と同じ、就寝とは逆)
@@ -1384,11 +1385,12 @@ describe("PWA: 昼寝(計測のみ)", () => {
 
   it("記録タブに昼寝の select が出て、選ぶと分の実値が入る", () => {
     const dom = boot();
+    const f = dom.window.__flourish;
     const sel = q(dom, 'select[data-f="napMin"]');
     expect(sel).not.toBe(null);
     sel.value = "15";
     sel.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
-    expect(JSON.parse(dom.window.localStorage.getItem(KEY)).entries["2026-08-18"]).toEqual({ napMin: 15 });
+    expect(JSON.parse(dom.window.localStorage.getItem(KEY)).entries[f.fmt(new Date())]).toEqual({ napMin: 15 });
   });
 
   // 【後退ガード】本体。昼寝は前夜の睡眠次第で最適量が変わり、達成/未達の二値で表せない。
@@ -1428,10 +1430,11 @@ describe("PWA: 昼寝(計測のみ)", () => {
   // 【後退ガード】混ぜないことの実測。加算先を meditationMin に寄せ直すと落ちる
   it("【後退ガード】昼寝を入れても meditationMin は増えない", () => {
     const dom = boot();
+    const f = dom.window.__flourish;
     const sel = q(dom, 'select[data-f="napMin"]');
     sel.value = "20";
     sel.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
-    const e = JSON.parse(dom.window.localStorage.getItem(KEY)).entries["2026-08-18"];
+    const e = JSON.parse(dom.window.localStorage.getItem(KEY)).entries[f.fmt(new Date())];
     expect(e.napMin).toBe(20);
     expect(e.meditationMin).toBe(undefined);
   });
