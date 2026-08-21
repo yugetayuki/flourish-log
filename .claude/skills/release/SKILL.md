@@ -5,6 +5,9 @@ when_to_use: 「リリースして」「デプロイして」「公開して」�
 ---
 
 出荷物は `index.html` と `sw.js` の2本。`main` に push すると GitHub Pages が数分で反映する。
+**加えて 2026-08-21 から、同じ2本を `C:\dev\app-hub` の `flourish-log/` へコピーして
+app-hub 側でもコミット・デプロイする**（本番の正は app-hub。コピーを忘れると
+本番だけ旧版のまま静かに取り残される）。
 
 ## 手順
 
@@ -51,7 +54,8 @@ when_to_use: 「リリースして」「デプロイして」「公開して」�
 ## 変えてはいけないもの
 
 - `localStorage` キー `flourish-log-v2` と退避キーの接頭辞（変えると既存の記録が読めなくなる）
-- リポジトリ名と公開URL（変えるとホーム画面に追加済みの PWA が切れる）
+- リポジトリ名と `localStorage` の互換（公開URLは 2026-08-21 に app-hub 配下
+  `https://app-hub-liard.vercel.app/flourish-log/` を正とした。github.io 側は移行期間だけ残す）
 - `window.__flourish` テストフック
 
 ## CSP を触った場合

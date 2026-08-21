@@ -4068,3 +4068,22 @@ describe("PWA v4.7: 歩数の実値化(v16)", () => {
     expect(f.weekStats(d, ws, day(6)).stepsCount).toEqual([0, 12000]);
   });
 });
+
+describe("PWA: app hub への出口", () => {
+  // app-hub のオリジン配下(/flourish-log/)へ移設した(2026-08-21)。ホーム画面の standalone
+  // コンテナにはブラウザの UI が無く、この1本のアンカーが唯一の出口になる。
+  // 消えても Aubade 単体は正常に見えるため、気づけない後退としてここで縛る
+  it("ヘッダーに href=\"/\" の出口が1つある", () => {
+    const dom = boot();
+    const home = q(dom, "header a.homelink");
+    expect(home).not.toBe(null);
+    expect(home.getAttribute("href")).toBe("/");
+  });
+
+  // 出口は増やさない。切り替えバーやアプリ一覧をここへ持ち込むと、
+  // 計測アプリの静けさ(§1)が崩れる。移動の多機能はハブ側の仕事
+  it("出口のアンカーは1本だけ", () => {
+    const dom = boot();
+    expect(qa(dom, "a.homelink").length).toBe(1);
+  });
+});

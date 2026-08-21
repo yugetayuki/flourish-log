@@ -42,6 +42,9 @@ header{display:flex;align-items:baseline;justify-content:space-between;margin-bo
 /* ラテン文字のワードマークなので、和文名だった頃(.04em)より字間を開けて落ち着かせる */
 h1{font-size:18px;font-weight:600;letter-spacing:.10em;margin:0}
 .eyebrow{font-size:9px;letter-spacing:2px;color:var(--dim)}
+.hdrright{display:flex;align-items:center;gap:2px}
+/* app hub(同一オリジンの入口)への唯一の出口。standalone では戻るジェスチャが無い */
+.homelink{color:var(--dim);text-decoration:none;font-size:17px;padding:12px 2px 12px 12px;line-height:1}
 #saveState{font-size:12px;color:var(--sub)}
 .banner{border:1px solid var(--line);border-radius:12px;padding:8px 12px;margin-bottom:12px;font-size:12px;line-height:1.6}
 .banner.err{background:var(--siennasoft);color:var(--sienna)}
@@ -142,8 +145,8 @@ svg{display:block}
 <body>
 <div id="wrap">
   <header>
-    <div class="title"><h1>Aubade</h1><span class="eyebrow mono">DAWN&nbsp;LOG&nbsp;·&nbsp;v4.25</span></div>
-    <span id="saveState"></span>
+    <div class="title"><h1>Aubade</h1><span class="eyebrow mono">DAWN&nbsp;LOG&nbsp;·&nbsp;v4.26</span></div>
+    <span class="hdrright"><span id="saveState"></span><a class="homelink" href="/" aria-label="app hub へ戻る">&#8962;</a></span>
   </header>
   <div id="banner"></div>
   <div id="view"></div>
@@ -1921,7 +1924,7 @@ function viewSettings(){
   h += '</div></div>';
 
   h += '<p class="foot">データはこの端末のブラウザ(このアプリ)内にのみ保存されます。バックアップはJSONコピーで。'
-    + 'このアプリの役割は計測と週次フィードバックまで — 行動を変えるのは環境設計の仕事です。 v4.25</p>';
+    + 'このアプリの役割は計測と週次フィードバックまで — 行動を変えるのは環境設計の仕事です。 v4.26</p>';
   return h;
 }
 
