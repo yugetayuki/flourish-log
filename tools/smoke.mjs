@@ -17,8 +17,23 @@ const check = (name, ok, detail) => {
   results.push({ name, ok, detail: d.length > 160 ? d.slice(0, 160) + "…" : d });
 };
 
+// app hub の共通部品(切り替え行)。本番では同一オリジンの app-hub が配る。
+// ここで最小のスタブを返すのは、CSP の script-src 'self' が実ブラウザで
+// module の読み込みを通すことまで確かめるため(404 のままでは経路を検査できない)
+const APPBAR_STUB = [
+  "export function mountAppbar(id) {",
+  '  const host = document.getElementById("appbar");',
+  '  if (host) host.textContent = "hub:" + id;',
+  "}",
+].join("\n");
+
 const server = http.createServer((req, res) => {
   const path = req.url === "/" ? "/index.html" : req.url.split("?")[0];
+  if (path === "/lib/appbar.js") {
+    res.writeHead(200, { "Content-Type": TYPES[".js"] });
+    res.end(APPBAR_STUB);
+    return;
+  }
   try {
     const body = readFileSync(join(ROOT, path));
     res.writeHead(200, { "Content-Type": TYPES[path.slice(path.lastIndexOf("."))] || "application/octet-stream" });
@@ -153,6 +168,12 @@ const otherHostBlocked = await page.evaluate(async () => {
   catch (e) { return "遮断: " + e.name; }
 });
 check("同期先以外のホストは依然として遮断される", otherHostBlocked.startsWith("遮断"), otherHostBlocked);
+
+// script-src に 'self' を足した効き目は、ここでしか確かめられない。
+// 弾かれると catch が走って切り替え行が空のままになる(画面は正常に見える)
+const appbarText = (await page.textContent("#appbar")) || "";
+check("切り替え行が描かれる(script-src 'self' が module を通す)",
+  appbarText.includes("hub:flourish-log"), appbarText || "(空)");
 
 // Service Worker はここでしか検証できない。JSDOM は実装を持たず、CSP の worker-src も解釈しない
 const swState = await page.evaluate(async () => {

@@ -346,6 +346,10 @@ describe("PWA: 配信ポリシー", () => {
     expect(csp).not.toBe(null);
     const c = csp.getAttribute("content");
     expect(c).toContain("default-src 'none'");
+    // 2026-08-21: app hub のオリジン配下へ移設し、共通部品(/lib/appbar.js)を読むために
+    // 同一オリジンだけ許した。外部ホストからのスクリプトは引き続き読めない
+    expect(c).toContain("script-src 'self' 'unsafe-inline'");
+    expect(c).not.toMatch(/script-src[^;]*https?:/);
     // 送信先はオーナーのPC(Tailscale)だけ。tailnet 内からしか引けないドメインなので、
     // 万一HTMLを注入されても記録の持ち出し先には使えない
     expect(c).toContain("connect-src https://*.ts.net");
@@ -4070,20 +4074,28 @@ describe("PWA v4.7: 歩数の実値化(v16)", () => {
 });
 
 describe("PWA: app hub への出口", () => {
+  // **v4.26 では「出口1本(⌂)だけ」に絞り、切り替え行は §1(計測アプリの静けさ)に反するとして
+  // 見送った。2026-08-21 にオーナーの明示要望で切り替え行へ変更した。** 静けさとの緊張は
+  // 認識したうえでの判断なので、「並びが多い」だけを理由に蒸し返さないこと。
+  // 蒸し返してよいのは、行の中身に件数・連続日数・バッジが入ったとき(制約1・5)。
+  //
   // app-hub のオリジン配下(/flourish-log/)へ移設した(2026-08-21)。ホーム画面の standalone
-  // コンテナにはブラウザの UI が無く、この1本のアンカーが唯一の出口になる。
-  // 消えても Aubade 単体は正常に見えるため、気づけない後退としてここで縛る
-  it("ヘッダーに href=\"/\" の出口が1つある", () => {
+  // コンテナにはブラウザの UI が無く、ここが唯一の出口になる。中身は app-hub 側の
+  // 共通部品(/lib/appbar.js)が描くので、こちらは置き場と読み込みだけを持つ
+  it("切り替え行の置き場がヘッダーの前にある", () => {
     const dom = boot();
-    const home = q(dom, "header a.homelink");
-    expect(home).not.toBe(null);
-    expect(home.getAttribute("href")).toBe("/");
+    const host = q(dom, "#wrap > #appbar");
+    expect(host).not.toBe(null);
+    expect(host.nextElementSibling.tagName).toBe("HEADER");
   });
 
-  // 出口は増やさない。切り替えバーやアプリ一覧をここへ持ち込むと、
-  // 計測アプリの静けさ(§1)が崩れる。移動の多機能はハブ側の仕事
-  it("出口のアンカーは1本だけ", () => {
-    const dom = boot();
-    expect(qa(dom, "a.homelink").length).toBe(1);
+  // 一覧をこちらに書き写すと app-hub 側と二重管理になり、必ず腐る。
+  // 読み込みは動的 import + catch にして、/lib/ が無い配信先でも本体を巻き込まない
+  it("一覧を持たず、共通部品を読み込むだけ", () => {
+    expect(html).toMatch(/import\("\/lib\/appbar\.js"\)/);
+    expect(html).toMatch(/\.catch\(/);
+    expect(html).toMatch(/mountAppbar\("flourish-log"\)/);
+    // アプリ名の一覧をここに持たない(持つと app-hub 側と食い違う)
+    expect(html).not.toMatch(/Momentum|Milestones|Tonnage|Altitude|Rubicon/);
   });
 });
