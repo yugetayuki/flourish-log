@@ -144,7 +144,7 @@ svg{display:block}
 <div id="wrap">
   <div id="appbar"></div>
   <header>
-    <div class="title"><h1>Aubade</h1><span class="eyebrow mono">DAWN&nbsp;LOG&nbsp;·&nbsp;v4.28</span></div>
+    <div class="title"><h1>Aubade</h1><span class="eyebrow mono">DAWN&nbsp;LOG&nbsp;·&nbsp;v4.29</span></div>
     <span id="saveState"></span>
   </header>
   <div id="banner"></div>
@@ -1218,11 +1218,13 @@ function viewLog(today){
     seg("companion", COMPANION_OPTS, e.companion!=null?e.companion:null,
         ["on-gray","on-gray","on-gray","on-gray"]));
   S.custom.forEach(function(c){ y += row(c.label,"", pairBtn(c.id, e[c.id]!=null?e[c.id]:null)); });
-  // **カードの並びは時系列ではなく入力頻度で決める(v4.28、オーナー判断 2026-08-21)。**
-  // v4.24 は「上から下へ時間が進む順」(昨日→昨夜→今朝)だったが、就寝時刻へ着くまでに
-  // 前日の行を全部またぐ必要があった。**頻度の出所はオーナーの申告**で、アプリは項目ごとの
-  // 入力回数を持っていない(実測ではない。頻度の実感が変わったら並びも再検討してよい)。
-  // **時系列は崩れている**(昨夜=前日の夜 → 昨日=前日の昼 で半日戻る)。承知のうえで、
+  // **カードの並びは時系列ではなく入力頻度で決める(v4.28-29、オーナー判断 2026-08-21)。**
+  // v4.24 は「上から下へ時間が進む順」(昨日→昨夜→今朝)だったが、毎朝必ず入れる
+  // 就寝時刻・起床時刻へ着くまでに前日の行を全部またぐ必要があった。並びは
+  // **昨夜 → 今朝 → 昨日**で、上2枚が「毎朝入れるもの」・3枚目が「前日を思い出して入れるもの」。
+  // **頻度の出所はオーナーの申告**で、アプリは項目ごとの入力回数を持っていない
+  // (実測ではない。頻度の実感が変わったら並びも再検討してよい)。
+  // **時系列は崩れている**(昨夜=前日の夜 → 今朝=当朝 → 昨日=前日の昼 と往復する)。承知のうえで、
   // 毎朝そこへ到達する距離のほうを取った。v4.24 が解こうとした「どの時点を入れているか
   // 分からない」はカード見出しの日付語が担保する(同じ項目名が複数のカードに出ないので、
   // 見出しを飛ばしても入力先は一意に決まる)。**時系列に戻すのは蒸し返しなので、
@@ -1235,8 +1237,6 @@ function viewLog(today){
     minSelect("bedtimeMin", BEDTIME_MIN, e.bedtimeMin!=null?e.bedtimeMin:null, fmtHM));
   if (en.ashwagandha) night += row("アシュワガンダ","", pairBtn("ashwagandha", e.ashwagandha!=null?e.ashwagandha:null));
   h += '<div class="card"><div class="chead"><span class="ctitle">'+(ahead?'今夜':'昨夜')+'</span></div>'+night+'</div>';
-
-  h += '<div class="card"><div class="chead"><span class="ctitle">'+(ahead?'今日':'昨日')+'</span></div>'+y+'</div>';
 
   var morn = '';
   // 就寝時刻と違い達成ラインを持たないので、超過を示す sienna は使わず睡眠系の indigo で統一する
@@ -1274,6 +1274,9 @@ function viewLog(today){
     morn += row("体重測定","", winner);
   }
   h += '<div class="card"><div class="chead"><span class="ctitle">'+(ahead?'明日の朝':'今朝')+'</span></div>'+morn+'</div>';
+
+  h += '<div class="card"><div class="chead"><span class="ctitle">'+(ahead?'今日':'昨日')+'</span></div>'+y+'</div>';
+
   // 水は1日かけて飲むので、他の項目のように翌朝まとめて思い出せない。指す時点を当日にして、
   // 飲むたびに合計を選び直す(前日を指したままだと今日ぶんを入れるのに明日の画面へ動く必要があった)
   if (en.waterMl) {
@@ -1929,7 +1932,7 @@ function viewSettings(){
   h += '</div></div>';
 
   h += '<p class="foot">データはこの端末のブラウザ(このアプリ)内にのみ保存されます。バックアップはJSONコピーで。'
-    + 'このアプリの役割は計測と週次フィードバックまで — 行動を変えるのは環境設計の仕事です。 v4.28</p>';
+    + 'このアプリの役割は計測と週次フィードバックまで — 行動を変えるのは環境設計の仕事です。 v4.29</p>';
   return h;
 }
 
