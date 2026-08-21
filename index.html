@@ -835,9 +835,9 @@ var expText = null, expNote = "", revText = null, revNote = "";
 var setNote = "", setNoteOk = false, armed = false, armTimer = null;
 var saveTimer = null;
 
-function esc(s){
-  return String(s).replace(/[&<>"']/g, function(c){
-    return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, function (c) {
+    return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
   });
 }
 function save(){
