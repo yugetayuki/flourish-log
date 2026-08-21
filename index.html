@@ -34,7 +34,9 @@ body{background:var(--bg);color:var(--ink);
   font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",sans-serif;
   font-size:15px;line-height:1.5}
 button{font:inherit;color:inherit;background:none;border:none;padding:0;cursor:pointer}
-input,select,textarea{font:inherit;color:var(--ink)}
+/* iOS は16px未満の入力欄にフォーカスすると画面を拡大する。個別に付け忘れても
+   ここが下限になるよう、まず全部に16pxを敷く(小さく見せたい欄は幅と余白で詰める) */
+input,select,textarea{font:inherit;font-size:16px;color:var(--ink)}
 .mono{font-family:ui-monospace,"SF Mono",SFMono-Regular,Menlo,monospace;font-variant-numeric:tabular-nums}
 #wrap{max-width:448px;margin:0 auto;padding:16px 16px calc(96px + env(safe-area-inset-bottom))}
 header{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px}
@@ -63,7 +65,7 @@ h1{font-size:18px;font-weight:600;letter-spacing:.10em;margin:0}
 .on-pine{background:var(--pine)} .on-indigo{background:var(--indigo)}
 .on-sienna{background:var(--sienna)} .on-gray{background:#8A9388}
 .wv{margin-top:8px;width:100%;border:1px solid var(--line);background:var(--bg);
-  border-radius:10px;padding:8px 12px;font-size:14px}
+  border-radius:10px;padding:8px 12px;font-size:16px}
 /* 記録タブの体重の数値。.msel / .memo と同じで、16px 未満だと iOS が focus 時に画面を拡大する。
    .wv 側を上げないのは同じ class が設定タブの同期URL・トークン欄にも掛かっているため
    (朝の動線にあるのは体重だけで、設定タブは別の判断) */
@@ -103,7 +105,7 @@ h1{font-size:18px;font-weight:600;letter-spacing:.10em;margin:0}
 .half{display:flex;gap:8px;padding:8px 0}
 .half>*{flex:1}
 textarea{width:100%;border:1px solid var(--line);background:var(--bg);border-radius:10px;
-  padding:8px;font-size:11px;line-height:1.5}
+  padding:8px;font-size:16px;line-height:1.5}
 /* box-sizing を指定しないと padding のぶん width:100% が親からはみ出す(input と違い textarea は
    既定で content-box のまま効いてしまう)。resize:vertical は横に伸ばしてカードを壊させないため。
    font-size は .msel と同じ理由で16px — 16px 未満だと iOS が focus 時に画面をズームする。
@@ -123,7 +125,7 @@ select{border:1px solid var(--line);background:var(--bg);border-radius:8px;paddi
 /* 記録タブの分入力。font-size は 16px 未満だと iOS が focus 時に画面をズームする */
 .msel{width:100%;padding:10px 12px;font-size:16px}
 .addrow{display:flex;gap:8px;padding:8px 0;border-top:1px solid var(--line)}
-.addrow input{flex:1;border:1px solid var(--line);background:var(--bg);border-radius:10px;padding:8px 12px;font-size:13px}
+.addrow input{flex:1;border:1px solid var(--line);background:var(--bg);border-radius:10px;padding:8px 12px;font-size:16px}
 .addbtn{padding:0 14px;border-radius:10px;background:var(--pine);color:#fff;font-size:13px;font-weight:500}
 .delbtn{padding:6px 10px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--sienna);font-size:12px}
 .danger{color:var(--sienna);background:var(--siennasoft);border:1px solid var(--line);
@@ -144,7 +146,7 @@ svg{display:block}
 <div id="wrap">
   <div id="appbar"></div>
   <header>
-    <div class="title"><h1>Aubade</h1><span class="eyebrow mono">DAWN&nbsp;LOG&nbsp;·&nbsp;v4.29</span></div>
+    <div class="title"><h1>Aubade</h1><span class="eyebrow mono">DAWN&nbsp;LOG&nbsp;·&nbsp;v4.30</span></div>
     <span id="saveState"></span>
   </header>
   <div id="banner"></div>
@@ -1932,7 +1934,7 @@ function viewSettings(){
   h += '</div></div>';
 
   h += '<p class="foot">データはこの端末のブラウザ(このアプリ)内にのみ保存されます。バックアップはJSONコピーで。'
-    + 'このアプリの役割は計測と週次フィードバックまで — 行動を変えるのは環境設計の仕事です。 v4.29</p>';
+    + 'このアプリの役割は計測と週次フィードバックまで — 行動を変えるのは環境設計の仕事です。 v4.30</p>';
   return h;
 }
 
